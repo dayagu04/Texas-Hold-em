@@ -32,3 +32,6 @@ backend/allowed_users.json
 
 # Local Claude config
 .claude/settings.local.json
+
+# Internal docs (temporary work artifacts, do not commit)
+docs/internal/

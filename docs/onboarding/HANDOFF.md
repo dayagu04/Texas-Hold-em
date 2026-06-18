@@ -6,12 +6,12 @@
 
 - 各自分支：后端 `feat/multi-game-backend`，前端 `feat/multi-game-frontend`。
 - 集合事件：每个里程碑结束时跑一次"端到端冒烟"——前端连后端，能完成一局任意玩法（含 bot）。
-- 如发现契约不够用：**先改 [API-CONTRACT.md](./API-CONTRACT.md)**，再 ping 另一端，最后写代码。
+- 如发现契约不够用：**先改 [API-CONTRACT.md](../design/API-CONTRACT.md)**，再 ping 另一端，最后写代码。
 - 不要互相直接 import；前端只通过 [api.ts](../frontend/src/api.ts) / [socket.ts](../frontend/src/socket.ts)；后端只通过 [sio.py](../backend/app/sio.py) 暴露事件。
 
 ## 0.5 M3.5 联调修正（🔴 紧急，阻断前端真实联调）
 
-> 后端已完成 M1-M3 单测，但实现偏离了 [API-CONTRACT.md](./API-CONTRACT.md)。以下两项必须修正后才能启动端到端联调。
+> 后端已完成 M1-M3 单测，但实现偏离了 [API-CONTRACT.md](../design/API-CONTRACT.md)。以下两项必须修正后才能启动端到端联调。
 
 ### 问题 1：C→S 事件名不匹配 🔴 硬阻断
 
@@ -21,7 +21,7 @@
 async def create_table(sid, data):  # 注册为 "create_table"
 ```
 
-**契约要求**（[API-CONTRACT.md §2.2](./API-CONTRACT.md)）：C→S 事件名必须用**冒号**分隔，如 `lobby:create_table`。
+**契约要求**（[API-CONTRACT.md §2.2](../design/API-CONTRACT.md)）：C→S 事件名必须用**冒号**分隔，如 `lobby:create_table`。
 
 **影响范围**：前端 `socket.emit('lobby:create_table', ...)` 发出后，后端无 handler 响应，所有 C→S 事件失效。
 
@@ -44,7 +44,7 @@ async def create_table(sid, data):
 
 **现状**：后端全仓搜不到任何 `emit('table:hand_end')`。一局结束时只广播 `table:state`，但 `state` 中无结算详情（赢家金额、摊牌、下局倒计时）。
 
-**契约定义**（[API-CONTRACT.md §2.4 L154](./API-CONTRACT.md)）：
+**契约定义**（[API-CONTRACT.md §2.4 L154](../design/API-CONTRACT.md)）：
 ```ts
 S→C: table:hand_end
 {
@@ -82,16 +82,16 @@ await sio.emit('table:hand_end', {
 ---
 
 ### M1 — GameEngine 抽象（基础设施）
-- [ ] 新建 [backend/app/game/engine.py](../backend/app/game/engine.py)：定义 `GameEngine` Protocol，参考 [ARCHITECTURE.md §3](./ARCHITECTURE.md)。
+- [ ] 新建 [backend/app/game/engine.py](../backend/app/game/engine.py)：定义 `GameEngine` Protocol，参考 [ARCHITECTURE.md §3](../design/ARCHITECTURE.md)。
 - [ ] 把现有 [backend/app/game/table.py](../backend/app/game/table.py) 重构为 `texas/engine.py`，把 [evaluator.py](../backend/app/game/evaluator.py) 迁入 `texas/`。
 - [ ] 新建 [backend/app/lobby.py](../backend/app/lobby.py)：管理 `tables: dict[str, GameEngine]`，提供 `create / join / leave / list`。
-- [ ] 重写 [backend/app/sio.py](../backend/app/sio.py) 按 [API-CONTRACT.md §2](./API-CONTRACT.md) 全部事件。
+- [ ] 重写 [backend/app/sio.py](../backend/app/sio.py) 按 [API-CONTRACT.md §2](../design/API-CONTRACT.md) 全部事件。
 - [ ] 新增 `auth.py` JWT 签发与校验。
 - [ ] 单测：`tests/test_engine_contract.py` 跑空引擎契约（占位）。
 
 ### M2 — 炸金花
 - [ ] [backend/app/game/brag/](../backend/app/game/brag/) 全套：engine + evaluator + bot。
-- [ ] 单测覆盖 [GAME-RULES.md §E B-01..03](./GAME-RULES.md)。
+- [ ] 单测覆盖 [GAME-RULES.md §E B-01..03](../design/GAME-RULES.md)。
 
 ### M3 — 掼蛋
 - [ ] [backend/app/game/guandan/](../backend/app/game/guandan/)：engine + combos + tribute + bot。
@@ -102,7 +102,7 @@ await sio.emit('table:hand_end', {
 - [ ] 30s 离线超时计时器，超时打 `auto-fold` / `auto-pass`。
 
 ### M5 — Bot 调优 + 部署
-- [ ] 按 [AI-BOTS.md](./AI-BOTS.md) 实现 6 个 bot 类。
+- [ ] 按 [AI-BOTS.md](../design/AI-BOTS.md) 实现 6 个 bot 类。
 - [ ] `tests/test_bots.py` 通过。
 - [ ] 写 `backend/Dockerfile` 与 `docker-compose.yml`（v1 可选，单文件即可）。
 
@@ -127,9 +127,9 @@ await sio.emit('table:hand_end', {
 ### M1 — 骨架与主题
 - [ ] 引入路由：建议 `react-router-dom@7`（在 [package.json](../frontend/package.json) 添加）。
 - [ ] 引入动效：`framer-motion`。
-- [ ] 建 [frontend/src/theme/tokens.css](../frontend/src/theme/tokens.css) 按 [UI-DESIGN.md §2](./UI-DESIGN.md)。
+- [ ] 建 [frontend/src/theme/tokens.css](../frontend/src/theme/tokens.css) 按 [UI-DESIGN.md §2](../design/UI-DESIGN.md)。
 - [ ] 在 [tailwind.config.js](../frontend/tailwind.config.js) 暴露 token 为 utility（`bg-felt`, `text-gold` 等）。
-- [ ] 重构 [frontend/src/types.ts](../frontend/src/types.ts) → `types/{common,texas,guandan,brag}.ts`，与 [API-CONTRACT.md](./API-CONTRACT.md) 对齐。
+- [ ] 重构 [frontend/src/types.ts](../frontend/src/types.ts) → `types/{common,texas,guandan,brag}.ts`，与 [API-CONTRACT.md](../design/API-CONTRACT.md) 对齐。
 - [ ] 集中 socket 单例 [socket.ts](../frontend/src/socket.ts)，hook `useSocket` 改为消费此单例。
 - [ ] 字典 [i18n/zh-CN.ts](../frontend/src/i18n/zh-CN.ts)。
 
@@ -147,7 +147,7 @@ await sio.emit('table:hand_end', {
 - [ ] 共用 [CardSprite.tsx](../frontend/src/components/CardSprite.tsx)、[ChipStack.tsx](../frontend/src/components/ChipStack.tsx)、[SeatCard.tsx](../frontend/src/components/SeatCard.tsx)。
 
 ### M4 — 动效与体验
-- [ ] 发牌 / 翻牌 / 筹码飞入按 [UI-DESIGN.md §8](./UI-DESIGN.md) 实现。
+- [ ] 发牌 / 翻牌 / 筹码飞入按 [UI-DESIGN.md §8](../design/UI-DESIGN.md) 实现。
 - [ ] 倒计时进度条（5s 红色警告）。
 - [ ] 断线重连提示横幅（"正在重连…")。
 - [ ] aria-live 朗读关键事件。
@@ -185,10 +185,10 @@ await sio.emit('table:hand_end', {
 ## 4. FAQ
 
 **Q: API 契约里的事件名我觉得别扭，能改吗？**
-A: 能。改了同步 ping 另一端在 [API-CONTRACT.md](./API-CONTRACT.md) 评审一行字"v1.0.1: rename …"，再写代码。
+A: 能。改了同步 ping 另一端在 [API-CONTRACT.md](../design/API-CONTRACT.md) 评审一行字"v1.0.1: rename …"，再写代码。
 
 **Q: 后端还没好，前端怎么开发？**
 A: 在 [frontend/src/socket.ts](../frontend/src/socket.ts) 写 mock 模式：开关 `VITE_MOCK=1` 时，由本地 reducer 模拟事件回放，用于 UI 调试。
 
 **Q: 掼蛋规则太复杂，能不能砍？**
-A: v1 已砍：固定打 2、关闭"过 A 升级"、关闭癞子、首局红心 4 先出。详见 [GAME-RULES.md §C](./GAME-RULES.md)。
+A: v1 已砍：固定打 2、关闭"过 A 升级"、关闭癞子、首局红心 4 先出。详见 [GAME-RULES.md §C](../design/GAME-RULES.md)。
