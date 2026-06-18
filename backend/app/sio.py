@@ -15,6 +15,16 @@ sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 sessions: dict[str, dict] = {}
 # name -> sid (同名顶替)
 name_to_sid: dict[str, str] = {}
+# sid -> asyncio.Task (离线计时器)
+disconnect_timers: dict[str, asyncio.Task] = {}
+
+
+async def _emit_error(sid: str, code: str, message: str, context: dict = None):
+    """统一错误发送。"""
+    payload = {"code": code, "message": message}
+    if context:
+        payload["context"] = context
+    await sio.emit("error", payload, room=sid)
 
 
 @sio.event
@@ -48,6 +58,42 @@ async def connect(sid, environ):
     # 同名顶替
     if name in name_to_sid:
         old_sid = name_to_sid[name]
+        # 取消旧连接的离线计时器（重连场景）
+        if old_sid in disconnect_timers:
+            disconnect_timers[old_sid].cancel()
+            del disconnect_timers[old_sid]
+
+        # 恢复桌内状态
+        old_sess = sessions.get(old_sid)
+        if old_sess and old_sess.get("table_id"):
+            # 重连：保留 table_id，更新 sid
+            table_id = old_sess["table_id"]
+            sessions.pop(old_sid, None)
+            sessions[sid] = {"name": name, "table_id": table_id}
+            name_to_sid[name] = sid
+
+            # 重新加入房间
+            await sio.enter_room(sid, table_id)
+            engine = lobby.get_table(table_id)
+            if engine:
+                # 更新引擎中的玩家 sid（如果引擎存储 sid）
+                # 掼蛋/德扑/炸金花的引擎以 sid 为 key，需要迁移
+                if old_sid in engine.players:
+                    player = engine.players.pop(old_sid)
+                    player.sid = sid
+                    engine.players[sid] = player
+                    # 如果 current_turn 是旧 sid，也要更新
+                    if engine.current_turn == old_sid:
+                        engine.current_turn = sid
+
+                # 推送最新状态
+                await sio.emit("table:state", engine.public_state(), room=sid)
+                await sio.emit("table:private", engine.private_state(sid), room=sid)
+
+            print(f"[reconnect] {old_sid} -> {sid} ({name})")
+            return
+
+        # 非重连场景：同名顶替
         await sio.emit("kicked", {"reason": "同名用户登录"}, room=old_sid)
         await sio.disconnect(old_sid)
         sessions.pop(old_sid, None)
@@ -61,18 +107,72 @@ async def connect(sid, environ):
 async def disconnect(sid):
     """断线处理：保留座位 30s，超时自动 fold/pass。"""
     print(f"[disconnect] {sid}")
-    sess = sessions.pop(sid, None)
+    sess = sessions.get(sid)
     if not sess:
         return
 
-    name = sess["name"]
-    if name in name_to_sid and name_to_sid[name] == sid:
-        del name_to_sid[name]
-
     table_id = sess.get("table_id")
     if table_id:
-        # TODO: M4 实现 30s 计时器
+        # 启动 30s 计时器
+        timer = asyncio.create_task(_handle_disconnect_timeout(sid, table_id))
+        disconnect_timers[sid] = timer
+
+
+async def _handle_disconnect_timeout(sid: str, table_id: str):
+    """30s 后执行自动 fold/pass。"""
+    try:
+        await asyncio.sleep(30)
+
+        # 检查是否已重连
+        if sid in disconnect_timers:
+            del disconnect_timers[sid]
+        else:
+            return  # 已重连，取消操作
+
+        # 检查玩家是否仍在桌上
+        sess = sessions.get(sid)
+        if not sess or sess.get("table_id") != table_id:
+            return
+
+        engine = lobby.get_table(table_id)
+        if not engine or not engine.hand_in_progress:
+            return
+
+        # 检查是否轮到该玩家
+        if engine.current_turn == sid:
+            # 自动执行最保守操作
+            if engine.game_type == "texas":
+                # 德扑：check 优先，否则 fold
+                legal = engine.private_state(sid).get("legal_actions", [])
+                action_names = [a["action"] for a in legal]
+                if "check" in action_names:
+                    engine.handle_action(sid, "check", {})
+                elif "fold" in action_names:
+                    engine.handle_action(sid, "fold", {})
+            elif engine.game_type in ["brag", "guandan"]:
+                # 炸金花/掼蛋：pass 或 fold
+                legal = engine.private_state(sid).get("legal_actions", [])
+                action_names = [a["action"] for a in legal]
+                if "pass" in action_names:
+                    engine.handle_action(sid, "pass", {})
+                elif "fold" in action_names:
+                    engine.handle_action(sid, "fold", {})
+
+            await _broadcast_table_state(table_id)
+            await _run_bot_loop(table_id)
+
+        # 清理 session
+        name = sess["name"]
+        sessions.pop(sid, None)
+        if name in name_to_sid and name_to_sid[name] == sid:
+            del name_to_sid[name]
+
+        print(f"[timeout] {sid} auto-folded due to disconnect")
+
+    except asyncio.CancelledError:
+        print(f"[timeout] {sid} reconnected, timer cancelled")
         pass
+
 
 
 # ---- 大厅事件 ----
@@ -108,7 +208,7 @@ async def lobby_create_table(sid, data):
             ante=ante,
         )
     except (ValueError, NotImplementedError) as e:
-        await sio.emit("error", {"code": "INVALID_ACTION", "message": str(e)}, room=sid)
+        await _emit_error(sid, "INVALID_ACTION", str(e), {"game_type": game_type})
         return
 
     engine = lobby.get_table(table_id)
@@ -142,7 +242,7 @@ async def lobby_join_table(sid, data):
 
     engine = lobby.get_table(table_id)
     if not engine:
-        await sio.emit("error", {"code": "TABLE_NOT_FOUND", "message": "房间不存在"}, room=sid)
+        await _emit_error(sid, "TABLE_NOT_FOUND", "房间不存在", {"table_id": table_id})
         return
 
     if spectate:
@@ -158,7 +258,7 @@ async def lobby_join_table(sid, data):
         taken_seats = {p["seat"] for p in engine.public_state()["players"]}
         available = [s for s in range(engine.max_players) if s not in taken_seats]
         if not available:
-            await sio.emit("error", {"code": "SEAT_TAKEN", "message": "房间已满"}, room=sid)
+            await _emit_error(sid, "SEAT_TAKEN", "房间已满", {"table_id": table_id})
             return
         seat = available[0]
 
@@ -202,7 +302,7 @@ async def table_start_hand(sid, data):
         return
 
     if not engine.can_start():
-        await sio.emit("error", {"code": "FORBIDDEN", "message": "人数不足"}, room=sid)
+        await _emit_error(sid, "FORBIDDEN", "人数不足", {"table_id": table_id})
         return
 
     engine.start_hand()
@@ -227,7 +327,7 @@ async def table_action(sid, data):
 
     ok, err = engine.handle_action(sid, action, payload)
     if not ok:
-        await sio.emit("error", {"code": "INVALID_ACTION", "message": err}, room=sid)
+        await _emit_error(sid, "INVALID_ACTION", err, {"action": action, "table_id": table_id})
         return
 
     await _broadcast_table_state(table_id)
