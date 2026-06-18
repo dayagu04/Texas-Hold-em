@@ -1,0 +1,10 @@
+{
+  "allowed_users": [
+    "Alice",
+    "Bob",
+    "Charlie",
+    "David",
+    "Eve",
+    "Frank"
+  ]
+}
