@@ -29,6 +29,14 @@ export const zhCN = {
     submitting: "登录中…",
   },
 
+  gameSelection: {
+    title: "选择你的游戏",
+    subtitle: "挑战智慧，享受博弈乐趣",
+    startGame: "开始游戏",
+    toLobby: "进入大厅",
+    hint: "选择一个游戏开始，或前往大厅查看正在进行的房间",
+  },
+
   lobby: {
     title: "游戏大厅",
     welcome: (name: string) => `欢迎，${name}`,
