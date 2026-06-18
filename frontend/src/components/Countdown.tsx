@@ -1,8 +1,9 @@
 /*
  * 倒计时组件（docs/UI-DESIGN.md §7，行动条左侧嵌入）。
- * 进度条线性递减，5 秒内变红。M3 骨架版纯文本；M4 精修进度条动画。
+ * 进度条线性递减，5 秒内变红 + aria-live 播报告警。
+ * M4：进度条动画 + 红色警告 + 无障碍支持。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { ANIM } from "../theme/motion";
 
 interface Props {
@@ -16,11 +17,29 @@ export default function Countdown({ deadline, className = "" }: Props) {
     const ms = new Date(deadline).getTime() - Date.now();
     return Math.max(1, Math.floor(ms / 1000));
   });
+  const [liveText, setLiveText] = useState("");
+  const dangerAnnounced = useRef(false);
+
+  useEffect(() => {
+    dangerAnnounced.current = false;
+    setLiveText("");
+  }, [deadline]);
 
   useEffect(() => {
     const update = () => {
       const ms = new Date(deadline).getTime() - Date.now();
-      setRemaining(Math.max(0, Math.floor(ms / 1000)));
+      const newRemaining = Math.max(0, Math.floor(ms / 1000));
+      setRemaining(newRemaining);
+
+      // 进入危险区域时播报一次
+      if (
+        newRemaining <= ANIM.countdownDanger &&
+        newRemaining > 0 &&
+        !dangerAnnounced.current
+      ) {
+        dangerAnnounced.current = true;
+        setLiveText(`警告：还剩 ${newRemaining} 秒`);
+      }
     };
     update();
     const timer = setInterval(update, 200);
@@ -32,6 +51,11 @@ export default function Countdown({ deadline, className = "" }: Props) {
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
+      {/* aria-live 区域（屏幕阅读器播报） */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {liveText}
+      </div>
+
       <div className="relative h-8 w-8">
         <svg className="h-full w-full -rotate-90 transform">
           <circle
@@ -52,13 +76,14 @@ export default function Countdown({ deadline, className = "" }: Props) {
             fill="none"
             strokeDasharray={`${2 * Math.PI * 14}`}
             strokeDashoffset={`${2 * Math.PI * 14 * (1 - progress / 100)}`}
-            className={`transition-all ${isDanger ? "text-danger" : "text-gold"}`}
+            className={`transition-all duration-200 ${isDanger ? "text-danger" : "text-gold"}`}
           />
         </svg>
       </div>
       <span
-        className={`text-sm font-bold ${isDanger ? "text-danger" : "text-text-hi"}`}
+        className={`text-sm font-bold transition-colors duration-200 ${isDanger ? "text-danger" : "text-text-hi"}`}
         style={{ fontFamily: "var(--font-mono)" }}
+        aria-label={`剩余时间 ${remaining} 秒`}
       >
         {remaining}s
       </span>

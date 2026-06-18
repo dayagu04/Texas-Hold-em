@@ -9,7 +9,77 @@
 - 如发现契约不够用：**先改 [API-CONTRACT.md](./API-CONTRACT.md)**，再 ping 另一端，最后写代码。
 - 不要互相直接 import；前端只通过 [api.ts](../frontend/src/api.ts) / [socket.ts](../frontend/src/socket.ts)；后端只通过 [sio.py](../backend/app/sio.py) 暴露事件。
 
+## 0.5 M3.5 联调修正（🔴 紧急，阻断前端真实联调）
+
+> 后端已完成 M1-M3 单测，但实现偏离了 [API-CONTRACT.md](./API-CONTRACT.md)。以下两项必须修正后才能启动端到端联调。
+
+### 问题 1：C→S 事件名不匹配 🔴 硬阻断
+
+**现状**：后端 [sio.py](../backend/app/sio.py) 用 `@sio.event` 注册 handler，该装饰器按**函数名**注册事件：
+```python
+@sio.event
+async def create_table(sid, data):  # 注册为 "create_table"
+```
+
+**契约要求**（[API-CONTRACT.md §2.2](./API-CONTRACT.md)）：C→S 事件名必须用**冒号**分隔，如 `lobby:create_table`。
+
+**影响范围**：前端 `socket.emit('lobby:create_table', ...)` 发出后，后端无 handler 响应，所有 C→S 事件失效。
+
+**修复方案**：改用 `@sio.on('事件名')` 显式注册。示例：
+```python
+@sio.on('lobby:create_table')  # ← 显式指定事件名
+async def create_table(sid, data):
+    ...
+```
+
+**需要修改的事件**（全部位于 [sio.py](../backend/app/sio.py)）：
+- `lobby:list`、`lobby:create_table`、`lobby:join_table`、`lobby:leave_table`
+- `table:action`、`table:start_hand`、`table:add_bot`、`table:remove_bot`、`table:chat`
+
+**验收**：前端发 `socket.emit('lobby:create_table', {...})` 能收到 `lobby:joined` 回执。
+
+---
+
+### 问题 2：`table:hand_end` 事件缺失 🟡 功能缺口
+
+**现状**：后端全仓搜不到任何 `emit('table:hand_end')`。一局结束时只广播 `table:state`，但 `state` 中无结算详情（赢家金额、摊牌、下局倒计时）。
+
+**契约定义**（[API-CONTRACT.md §2.4 L154](./API-CONTRACT.md)）：
+```ts
+S→C: table:hand_end
+{
+  table_id: string;
+  hand_id: string;
+  results: HandResult[];     // 各玩法的结算对象数组
+  next_hand_in: number;      // ms，0 表示等手动 start_hand
+}
+```
+
+**影响**：前端结算浮层无法触发、赢家光晕不亮、无法显示下局倒计时。
+
+**修复方案**：在各引擎的"一局结束"分支（德扑 showdown、炸金花最后比牌、掼蛋两人出完牌）调用：
+```python
+await sio.emit('table:hand_end', {
+    'table_id': table_id,
+    'hand_id': hand_id,
+    'results': [...],  # 按玩法构造
+    'next_hand_in': 5000  # 5s 后自动开下局，或 0 等手动
+}, room=table_id)
+```
+
+**验收**：4 bot 打完一局德扑，前端能收到 `table:hand_end` 且 `results[0].winnings > 0`。
+
+---
+
 ## 1. 后端 Agent 任务清单
+
+### ~~M1 — GameEngine 抽象（基础设施）~~ ✅
+### ~~M2 — 炸金花~~ ✅
+### ~~M3 — 掼蛋~~ ✅
+
+**注**：M1-M3 单测全绿，但需先完成 §0.5 的契约修正才能进入真实联调。
+
+---
 
 ### M1 — GameEngine 抽象（基础设施）
 - [ ] 新建 [backend/app/game/engine.py](../backend/app/game/engine.py)：定义 `GameEngine` Protocol，参考 [ARCHITECTURE.md §3](./ARCHITECTURE.md)。
@@ -45,6 +115,14 @@
 ---
 
 ## 2. 前端 Agent 任务清单
+
+### ~~M1 — 骨架与主题~~ ✅
+### ~~M2 — 登录 / 大厅~~ ✅（部分，等后端修正）
+### ~~M3 — 牌桌~~ ✅（骨架，等后端修正）
+
+**当前状态**：前端 `BragBoard`/`GuandanBoard` 已存在，`mock.ts` 仅回放 Texas。真实联调被 §0.5 的后端契约偏差阻断。前端可继续推进不依赖后端在线的 M4/M5 任务（动效、构建）。
+
+---
 
 ### M1 — 骨架与主题
 - [ ] 引入路由：建议 `react-router-dom@7`（在 [package.json](../frontend/package.json) 添加）。
@@ -86,7 +164,18 @@
 
 ---
 
-## 3. 共同验收（M5 末端）
+## 3. 联调前置条件（在进入 M5 共同验收前必须完成）
+
+- [ ] 后端完成 §0.5 的两项契约修正（C→S 事件名 + `table:hand_end`）。
+- [ ] 前端 `mock.ts` 或真实后端连接能跑通一局 brag/guandan（目前仅 Texas 通）。
+- [ ] 前端发 `lobby:create_table`（冒号）能收到 `lobby:joined` 回执。
+- [ ] 任意玩法打完一局能收到 `table:hand_end` 事件（前端控制台 log 验证）。
+
+**验收路径**：前端连后端，创建一个 brag 桌 + 加 2 个 bot，打完一局，前端能正常显示结算浮层。
+
+---
+
+## 4. 共同验收（M5 末端，联调通过后执行）
 
 - [ ] 端到端：4 真人玩家分别从 4 浏览器登录，玩一局掼蛋打完结算。
 - [ ] 混合：1 真人 + 3 bot 玩炸金花，bot 不卡顿。

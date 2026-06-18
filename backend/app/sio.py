@@ -17,6 +17,8 @@ sessions: dict[str, dict] = {}
 name_to_sid: dict[str, str] = {}
 # sid -> asyncio.Task (离线计时器)
 disconnect_timers: dict[str, asyncio.Task] = {}
+# table_id -> hand_id (已发送 hand_end 的 hand_id，避免重复发送)
+hand_end_sent: dict[str, str] = {}
 
 
 async def _emit_error(sid: str, code: str, message: str, context: dict = None):
@@ -176,14 +178,14 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
 
 
 # ---- 大厅事件 ----
-@sio.event
+@sio.on('lobby:list')
 async def lobby_list(sid, data):
     """推送完整大厅列表。"""
     tables = lobby.list_tables()
     await sio.emit("lobby:update", {"tables": tables}, room=sid)
 
 
-@sio.event
+@sio.on('lobby:create_table')
 async def lobby_create_table(sid, data):
     """创建房间并自动入座 0 号位。"""
     sess = sessions.get(sid)
@@ -229,7 +231,7 @@ async def lobby_create_table(sid, data):
     await _broadcast_lobby_update()
 
 
-@sio.event
+@sio.on('lobby:join_table')
 async def lobby_join_table(sid, data):
     """加入已有房间。"""
     sess = sessions.get(sid)
@@ -270,7 +272,7 @@ async def lobby_join_table(sid, data):
     await _broadcast_lobby_update()
 
 
-@sio.event
+@sio.on('lobby:leave_table')
 async def lobby_leave_table(sid, data):
     """离桌（不退大厅）。"""
     sess = sessions.get(sid)
@@ -289,7 +291,7 @@ async def lobby_leave_table(sid, data):
 
 
 # ---- 桌面事件 ----
-@sio.event
+@sio.on('table:start_hand')
 async def table_start_hand(sid, data):
     """开始新一手。"""
     sess = sessions.get(sid)
@@ -310,7 +312,7 @@ async def table_start_hand(sid, data):
     await _run_bot_loop(table_id)
 
 
-@sio.event
+@sio.on('table:action')
 async def table_action(sid, data):
     """玩家行动。"""
     sess = sessions.get(sid)
@@ -334,7 +336,7 @@ async def table_action(sid, data):
     await _run_bot_loop(table_id)
 
 
-@sio.event
+@sio.on('table:add_bot')
 async def table_add_bot(sid, data):
     """添加 Bot。"""
     sess = sessions.get(sid)
@@ -356,7 +358,7 @@ async def table_add_bot(sid, data):
     await _broadcast_lobby_update()
 
 
-@sio.event
+@sio.on('table:remove_bot')
 async def table_remove_bot(sid, data):
     """移除 Bot。"""
     sess = sessions.get(sid)
@@ -380,7 +382,7 @@ async def table_remove_bot(sid, data):
     await _broadcast_lobby_update()
 
 
-@sio.event
+@sio.on('table:chat')
 async def table_chat(sid, data):
     """聊天。"""
     sess = sessions.get(sid)
@@ -416,6 +418,14 @@ async def _broadcast_table_state(table_id: str):
         if not p.get("is_bot"):
             private = engine.private_state(p["sid"])
             await sio.emit("table:private", private, room=p["sid"])
+
+    # 如果手牌刚结束且尚未发送 hand_end，emit table:hand_end
+    if engine.is_hand_over() and hasattr(engine, 'get_hand_end_payload'):
+        current_hand_id = str(engine.hand_id)
+        if hand_end_sent.get(table_id) != current_hand_id:
+            hand_end_payload = engine.get_hand_end_payload()
+            await sio.emit("table:hand_end", hand_end_payload, room=table_id)
+            hand_end_sent[table_id] = current_hand_id
 
 
 async def _broadcast_lobby_update():

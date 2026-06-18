@@ -18,6 +18,18 @@ import {
   MOCK_TEXAS_STATES,
   MOCK_SELF_SID,
 } from "../__fixtures__/texasHand";
+import {
+  MOCK_BRAG_HAND_END,
+  MOCK_BRAG_PRIVATE,
+  MOCK_BRAG_STATES,
+  MOCK_BRAG_SELF_SID,
+} from "../__fixtures__/bragHand";
+import {
+  MOCK_GUANDAN_HAND_END,
+  MOCK_GUANDAN_PRIVATE,
+  MOCK_GUANDAN_STATES,
+  MOCK_GUANDAN_SELF_SID,
+} from "../__fixtures__/guandanHand";
 
 type AnyHandler = (data: unknown) => void;
 
@@ -26,6 +38,7 @@ export class MockTransport implements Transport {
   private statusHandlers = new Set<(s: ConnectionStatus) => void>();
   private current: ConnectionStatus = "idle";
   private stateIdx = 0;
+  private currentGameType: "texas" | "guandan" | "brag" = "texas";
 
   private setStatus(s: ConnectionStatus): void {
     this.current = s;
@@ -77,37 +90,48 @@ export class MockTransport implements Transport {
         break;
       case "lobby:join_table": {
         const p = payload as { table_id: string };
+        // 根据 table_id 推断玩法
+        if (p.table_id.includes("brag")) {
+          this.currentGameType = "brag";
+        } else if (p.table_id.includes("guandan")) {
+          this.currentGameType = "guandan";
+        } else {
+          this.currentGameType = "texas";
+        }
         this.fire("lobby:joined", { table_id: p.table_id, your_seat: 0 });
         await this.delay(200);
+        this.stateIdx = 0;
         this.pushState(0);
-        this.fire("table:private", MOCK_TEXAS_PRIVATE);
+        this.pushPrivate();
         break;
       }
       case "table:start_hand":
         this.stateIdx = 0;
         this.pushState(0);
-        this.fire("table:private", MOCK_TEXAS_PRIVATE);
+        this.pushPrivate();
         break;
       case "table:action": {
         // 推进到下一帧；走到结尾发 hand_end
         await this.delay(300);
-        if (this.stateIdx < MOCK_TEXAS_STATES.length - 1) {
+        const maxIdx = this.getMaxStateIndex();
+        if (this.stateIdx < maxIdx) {
           this.stateIdx += 1;
           this.pushState(this.stateIdx);
-          this.fire("table:private", MOCK_TEXAS_PRIVATE);
+          this.pushPrivate();
         } else {
           await this.delay(400);
-          this.fire("table:hand_end", MOCK_TEXAS_HAND_END);
+          this.pushHandEnd();
         }
         break;
       }
       case "table:chat": {
         const p = payload as { table_id: string; text: string };
+        const selfSid = this.getCurrentSelfSid();
         this.fire("table:chat", {
-          sid: MOCK_SELF_SID,
+          sid: selfSid,
           name: "你",
           text: p.text,
-          ts: "2026-06-18T14:31:00Z",
+          ts: new Date().toISOString(),
         });
         break;
       }
@@ -117,7 +141,67 @@ export class MockTransport implements Transport {
   }
 
   private pushState(idx: number): void {
-    this.fire("table:state", MOCK_TEXAS_STATES[idx]);
+    switch (this.currentGameType) {
+      case "texas":
+        this.fire("table:state", MOCK_TEXAS_STATES[idx]);
+        break;
+      case "brag":
+        this.fire("table:state", MOCK_BRAG_STATES[idx]);
+        break;
+      case "guandan":
+        this.fire("table:state", MOCK_GUANDAN_STATES[idx]);
+        break;
+    }
+  }
+
+  private pushPrivate(): void {
+    switch (this.currentGameType) {
+      case "texas":
+        this.fire("table:private", MOCK_TEXAS_PRIVATE);
+        break;
+      case "brag":
+        this.fire("table:private", MOCK_BRAG_PRIVATE);
+        break;
+      case "guandan":
+        this.fire("table:private", MOCK_GUANDAN_PRIVATE);
+        break;
+    }
+  }
+
+  private pushHandEnd(): void {
+    switch (this.currentGameType) {
+      case "texas":
+        this.fire("table:hand_end", MOCK_TEXAS_HAND_END);
+        break;
+      case "brag":
+        this.fire("table:hand_end", MOCK_BRAG_HAND_END);
+        break;
+      case "guandan":
+        this.fire("table:hand_end", MOCK_GUANDAN_HAND_END);
+        break;
+    }
+  }
+
+  private getMaxStateIndex(): number {
+    switch (this.currentGameType) {
+      case "texas":
+        return MOCK_TEXAS_STATES.length - 1;
+      case "brag":
+        return MOCK_BRAG_STATES.length - 1;
+      case "guandan":
+        return MOCK_GUANDAN_STATES.length - 1;
+    }
+  }
+
+  private getCurrentSelfSid(): string {
+    switch (this.currentGameType) {
+      case "texas":
+        return MOCK_SELF_SID;
+      case "brag":
+        return MOCK_BRAG_SELF_SID;
+      case "guandan":
+        return MOCK_GUANDAN_SELF_SID;
+    }
   }
 
   subscribe<E extends ServerEvent>(

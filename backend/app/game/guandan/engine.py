@@ -214,6 +214,15 @@ class GuandanEngine:
     def is_hand_over(self) -> bool:
         return not self.hand_in_progress
 
+    def get_hand_end_payload(self) -> dict:
+        """返回 table:hand_end 事件的 payload。"""
+        return {
+            "table_id": self.id,
+            "hand_id": str(self.hand_id),
+            "results": self.hand_result if hasattr(self, 'hand_result') else [],
+            "next_hand_in": 0,  # 0 表示等手动 start_hand
+        }
+
     def next_bot_action(self) -> tuple[str, str, dict] | None:
         """若当前回合是 Bot，返回其决策。"""
         if not self.current_turn:

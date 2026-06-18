@@ -207,6 +207,15 @@ class TexasEngine:
     def is_hand_over(self) -> bool:
         return not self.hand_in_progress
 
+    def get_hand_end_payload(self) -> dict:
+        """返回 table:hand_end 事件的 payload。"""
+        return {
+            "table_id": self.id,
+            "hand_id": str(self.hand_id),
+            "results": self.winners_info,
+            "next_hand_in": 0,  # 0 表示等手动 start_hand
+        }
+
     def next_bot_action(self) -> tuple[str, str, dict] | None:
         """若当前回合是 Bot，返回其决策。"""
         if not self.current_turn:
@@ -377,8 +386,11 @@ class TexasEngine:
             winner = contenders[0]
             winner.chips += self.pot
             self.winners_info = [{
-                "name": winner.name, "amount": self.pot,
-                "hand": "对手弃牌", "cards": [],
+                "sid": winner.sid,
+                "name": winner.name,
+                "amount": self.pot,
+                "hand": "对手弃牌",
+                "cards": [],
             }]
         else:
             self._settle_showdown(contenders)
@@ -429,6 +441,7 @@ class TexasEngine:
             cat, *vals = scores[sid]
             hand_name = CATEGORY_NAMES.get(cat, "未知牌型")
             self.winners_info.append({
+                "sid": sid,
                 "name": player.name,
                 "amount": amt,
                 "hand": hand_name,
