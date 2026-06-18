@@ -26,21 +26,15 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
   const [step, setStep] = useState(preselectedGame ? 2 : 1);
   const [gameType, setGameType] = useState<GameType | null>(preselectedGame || null);
   const [tableName, setTableName] = useState("");
-  const [seats, setSeats] = useState(6);
+  const [seats, setSeats] = useState(
+    preselectedGame ? GAME_SEATS[preselectedGame].default : 6,
+  );
   const [initialChips, setInitialChips] = useState(1000);
   const [smallBlind, setSmallBlind] = useState(10);
   const [ante, setAnte] = useState(10);
   const [spectatable, setSpectatable] = useState(true);
   const [bots, setBots] = useState<Record<number, BotLevel | null>>({});
   const [isCreating, setIsCreating] = useState(false);
-
-  // 如果有预选玩法，初始化座位数
-  useEffect(() => {
-    if (preselectedGame) {
-      const cfg = GAME_SEATS[preselectedGame];
-      setSeats(cfg.default);
-    }
-  }, [preselectedGame]);
 
   useEffect(() => {
     const off = subscribe("lobby:joined", (data) => {
