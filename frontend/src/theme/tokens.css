@@ -115,3 +115,26 @@
     opacity: 1;
   }
 }
+
+/* 发牌飞入：牌从牌堆（上方偏中）飞向座位，220ms */
+@keyframes dealCard {
+  from {
+    opacity: 0;
+    transform: translate(-60px, -80px) scale(0.55) rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+  }
+}
+
+/* 倒计时危险脉动（最后 5s），与红色文字配合 */
+@keyframes urgentPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}

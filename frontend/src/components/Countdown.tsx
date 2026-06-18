@@ -70,7 +70,11 @@ export default function Countdown({ deadline, className = "" }: Props) {
             fill="none"
             strokeDasharray={`${2 * Math.PI * 14}`}
             strokeDashoffset={`${2 * Math.PI * 14 * (1 - progress / 100)}`}
-            className={`transition-all duration-200 ${isDanger ? "text-danger" : "text-gold"}`}
+            className={`transition-all duration-200 ${
+              isDanger
+                ? "text-danger animate-[urgentPulse_500ms_ease-in-out_infinite]"
+                : "text-gold"
+            }`}
           />
         </svg>
       </div>
