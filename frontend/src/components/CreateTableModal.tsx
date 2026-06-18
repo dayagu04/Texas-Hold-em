@@ -4,14 +4,15 @@
  * 右侧实时预览：座位数 + 玩法图标 + AI 计数。
  * M2 骨架版：基础表单 + 发 lobby:create_table；UI 精修（卡片高亮 / 动画）在 M4。
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zhCN } from "../i18n/zh-CN";
-import { emit } from "../socket";
+import { useSocket } from "../hooks/useSocket";
 import type { BotLevel, CreateTablePayload, GameType } from "../types";
 
 interface Props {
   onClose: () => void;
   onCreated: (tableId: string) => void;
+  preselectedGame?: GameType;
 }
 
 const GAME_SEATS: Record<GameType, { min: number; max: number; default: number }> = {
@@ -20,9 +21,10 @@ const GAME_SEATS: Record<GameType, { min: number; max: number; default: number }
   brag: { min: 2, max: 6, default: 6 },
 };
 
-export default function CreateTableModal({ onClose, onCreated }: Props) {
-  const [step, setStep] = useState(1);
-  const [gameType, setGameType] = useState<GameType | null>(null);
+export default function CreateTableModal({ onClose, onCreated, preselectedGame }: Props) {
+  const { subscribe, emit } = useSocket();
+  const [step, setStep] = useState(preselectedGame ? 2 : 1);
+  const [gameType, setGameType] = useState<GameType | null>(preselectedGame || null);
   const [tableName, setTableName] = useState("");
   const [seats, setSeats] = useState(6);
   const [initialChips, setInitialChips] = useState(1000);
@@ -30,6 +32,24 @@ export default function CreateTableModal({ onClose, onCreated }: Props) {
   const [ante, setAnte] = useState(10);
   const [spectatable, setSpectatable] = useState(true);
   const [bots, setBots] = useState<Record<number, BotLevel | null>>({});
+  const [isCreating, setIsCreating] = useState(false);
+
+  // 如果有预选玩法，初始化座位数
+  useEffect(() => {
+    if (preselectedGame) {
+      const cfg = GAME_SEATS[preselectedGame];
+      setSeats(cfg.default);
+    }
+  }, [preselectedGame]);
+
+  useEffect(() => {
+    const off = subscribe("lobby:joined", (data) => {
+      if (isCreating) {
+        onCreated(data.table_id);
+      }
+    });
+    return off;
+  }, [subscribe, onCreated, isCreating]);
 
   const handleGameSelect = (g: GameType) => {
     setGameType(g);
@@ -58,9 +78,8 @@ export default function CreateTableModal({ onClose, onCreated }: Props) {
       .map(([seat, level]) => ({ seat: Number(seat), level: level! }));
     if (botList.length) payload.bots = botList;
 
+    setIsCreating(true);
     emit("lobby:create_table", payload);
-    // mock 模式下 lobby:joined 返回 table_id；真实环境等后端回复
-    onCreated("t-texas-1"); // M2 简化：直接跳（M5 联调时改为监听 lobby:joined）
   };
 
   const botCount = Object.values(bots).filter(Boolean).length;
@@ -304,10 +323,10 @@ export default function CreateTableModal({ onClose, onCreated }: Props) {
           </button>
           <button
             onClick={() => (step < 3 ? setStep(step + 1) : handleCreate())}
-            disabled={step === 1 && !gameType}
+            disabled={(step === 1 && !gameType) || isCreating}
             className="rounded-card bg-gold px-4 py-2 text-sm font-bold text-base transition hover:bg-gold-soft disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {step === 3 ? zhCN.common.create : zhCN.common.next}
+            {step === 3 ? (isCreating ? "创建中..." : zhCN.common.create) : zhCN.common.next}
           </button>
         </footer>
       </div>

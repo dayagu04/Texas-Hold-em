@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./auth";
 import Login from "./components/Login";
+import GameSelection from "./components/GameSelection";
 import Lobby from "./components/Lobby";
 import TablePage from "./components/TablePage";
 import ReconnectBanner from "./components/ReconnectBanner";
@@ -19,6 +20,14 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <GameSelection />
+            </RequireAuth>
+          }
+        />
+        <Route
           path="/lobby"
           element={
             <RequireAuth>
@@ -34,7 +43,7 @@ export default function App() {
             </RequireAuth>
           }
         />
-        <Route path="*" element={<Navigate to="/lobby" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
   );
