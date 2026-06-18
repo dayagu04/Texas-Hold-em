@@ -1,57 +1,76 @@
-import { useState } from 'react';
-import { Socket } from 'socket.io-client';
+/*
+ * 登录页（docs/UI-DESIGN.md §5）。
+ * 调 POST /api/login，存 token，跳 /lobby；失败按 error.code 映射文案。
+ * M1 骨架版：暗金主题落地，动效精修在 M4。
+ */
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { ApiError, login } from "../api";
+import { useAuth } from "../auth";
+import { errorText } from "../i18n/zh-CN";
+import { zhCN } from "../i18n/zh-CN";
+import { IS_MOCK } from "../socket";
 
-interface LoginProps {
-  socket: Socket | null;
-  onLogin: (username: string) => void;
-}
-
-export default function Login({ socket, onLogin }: LoginProps) {
-  const [username, setUsername] = useState('');
-  const [error, setError] = useState('');
+export default function Login() {
+  const [name, setName] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const { signIn } = useAuth();
+  const navigate = useNavigate();
 
-  const handleLogin = () => {
-    if (!socket || !username.trim()) return;
+  const handleSubmit = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || loading) return;
     setLoading(true);
-    setError('');
-    socket.emit('login', { username: username.trim() });
-    socket.once('login_result', (data) => {
-      setLoading(false);
-      if (data.ok) {
-        onLogin(username.trim());
+    setError("");
+    try {
+      if (IS_MOCK) {
+        signIn("mock-token", trimmed);
       } else {
-        setError(data.error);
+        const res = await login(trimmed);
+        signIn(res.token, res.name);
       }
-    });
+      navigate("/lobby", { replace: true });
+    } catch (e) {
+      setError(e instanceof ApiError ? errorText(e.code) : errorText("UNKNOWN"));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
-      <div className="bg-gray-800 rounded-xl shadow-2xl border border-gold p-8 w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gold mb-2">♠️ 德州扑克 ♥️</h1>
-          <p className="text-gray-400">输入你的用户名开始游戏</p>
+    <div className="flex min-h-screen items-center justify-center bg-vignette p-4">
+      <div className="w-full max-w-md rounded-panel border border-gold/40 bg-elev p-8 shadow-elev">
+        <div className="mb-8 text-center">
+          <h1
+            className="mb-2 text-4xl text-gold"
+            style={{ fontFamily: "var(--font-brand)" }}
+          >
+            {zhCN.login.title}
+          </h1>
+          <p className="text-sm text-text-lo">— {zhCN.brandSub} —</p>
         </div>
         <div className="space-y-4">
           <input
             type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-            placeholder="用户名"
-            className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg
-                     text-white placeholder-gray-400 focus:outline-none focus:border-gold"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+            placeholder={zhCN.login.placeholder}
             disabled={loading}
+            className="w-full rounded-card border border-gold/50 bg-base px-4 py-3 text-text-hi placeholder:text-text-lo transition-all focus:border-gold-soft focus:shadow-[0_0_0_1px_var(--color-gold-soft)] focus:outline-none disabled:opacity-50"
           />
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          {error && (
+            <p className="animate-[slideDown_var(--duration-fast)_ease-out] text-sm text-danger">
+              {error}
+            </p>
+          )}
           <button
-            onClick={handleLogin}
-            disabled={loading || !username.trim()}
-            className="w-full py-3 bg-gold hover:bg-gold-dark text-gray-900 font-bold
-                     rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={handleSubmit}
+            disabled={loading || !name.trim()}
+            className="w-full rounded-card bg-gold py-3 font-bold text-base transition-all hover:shadow-[0_0_6px_var(--color-gold)] disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? '登录中...' : '进入大厅'}
+            {loading ? zhCN.login.submitting : zhCN.login.submit}
           </button>
         </div>
       </div>
