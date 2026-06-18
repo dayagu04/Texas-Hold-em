@@ -1,0 +1,117 @@
+/*
+ * 设计令牌 · 单一事实来源
+ * 对应 docs/UI-DESIGN.md §2。所有颜色 / 圆角 / 阴影 / 时间常量集中在此。
+ * 组件内禁止出现裸色值（#xxx）或裸时间值（220ms）。
+ *
+ * 采用 Tailwind v4 的 @theme：此处声明的变量既生成 utility（bg-felt / text-gold /
+ * shadow-card / rounded-panel ...），又作为真实 CSS 自定义属性挂在 :root 上，
+ * 可在 keyframes / 内联样式里以 var(--xxx) 引用。
+ */
+
+@theme {
+  /* ---- 颜色 ---- */
+  --color-base: #0d0f0e; /* bg-base / text-base：全局深底 */
+  --color-elev: #161a18; /* bg-elev：浮层 / 卡片底 */
+  --color-gold: #c9a14a; /* text-gold / bg-gold / border-gold：主金 */
+  --color-gold-soft: #e7c87a; /* 高亮金（focus / hover 发光） */
+  --color-rim: #2c2417; /* 边框暗棕 */
+  --color-text-hi: #f5efe0; /* 主文案 */
+  --color-text-lo: #b3a98e; /* 次文案 */
+  --color-danger: #c0392b; /* 危险 / 错误 / 弃牌红 */
+  --color-warn: #d4a01b; /* 警告（倒计时告急） */
+  --color-info: #4a8fbf; /* 信息蓝 */
+
+  /* 玩法 tag 配色（大厅卡片）：德扑深红 / 掼蛋深蓝 / 炸金花暗紫 */
+  --color-tag-texas: #7a1f24;
+  --color-tag-guandan: #1f3a6b;
+  --color-tag-brag: #4a2363;
+
+  /* ---- 圆角 ---- */
+  --radius-card: 8px; /* rounded-card：牌 / 小卡 */
+  --radius-panel: 16px; /* rounded-panel：面板 / 弹窗 */
+
+  /* ---- 阴影 ---- */
+  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(201, 161, 74, 0.15) inset;
+  --shadow-elev: 0 12px 40px rgba(0, 0, 0, 0.55);
+
+  /* ---- 动效时长（var() 引用；framer-motion 数值见 theme/motion.ts，保持一致） ---- */
+  --duration-fast: 120ms; /* duration-fast：面板淡入 */
+  --duration-base: 220ms; /* duration-base：状态切换 / 发牌单张 */
+  --duration-slow: 420ms; /* duration-slow：复杂时序 */
+
+  /* ---- 字体族 ---- */
+  --font-ui: "Inter", "PingFang SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace; /* 筹码 / 倒计时数字 */
+  --font-brand: "Cormorant Garamond", serif; /* 品牌位标题 */
+}
+
+/*
+ * 非 utility 的复合令牌（渐变无法走 --color-*，单独定义 + 自定义 utility）。
+ */
+:root {
+  --felt: radial-gradient(ellipse at center, #1f6f4f 0%, #0d3a2a 70%, #061d14 100%);
+  --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* felt 桌面背景：bg-felt */
+@utility bg-felt {
+  background: var(--felt);
+}
+
+/* 全屏暗角：bg-vignette（叠在深底之上） */
+@utility bg-vignette {
+  background-color: var(--color-base);
+  background-image: var(--vignette);
+}
+
+/* ---- Keyframes（docs/UI-DESIGN.md §8 动效清单） ---- */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 翻牌 3D（y 轴旋转，360ms） */
+@keyframes flipCard {
+  from {
+    transform: rotateY(90deg);
+    opacity: 0;
+  }
+  to {
+    transform: rotateY(0);
+    opacity: 1;
+  }
+}
+
+/* 赢家光晕（径向渐变脉动 1200ms） */
+@keyframes winnerGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 20px rgba(201, 161, 74, 0.5),
+      0 0 40px rgba(201, 161, 74, 0.3);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 40px rgba(201, 161, 74, 0.8),
+      0 0 80px rgba(201, 161, 74, 0.5);
+    transform: scale(1.02);
+  }
+}
+
+/* Bot 思考闪烁（三点循环） */
+@keyframes botThinking {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}

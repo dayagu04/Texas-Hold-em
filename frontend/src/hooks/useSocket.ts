@@ -1,21 +1,22 @@
-import { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
-
-const SOCKET_URL = 'http://localhost:8000';
+/*
+ * useSocket · 消费 socket 单例（docs/HANDOFF.md M1）。
+ * 提供连接状态 + 订阅/发送的便捷封装；组件不直接碰 socket.io-client。
+ */
+import { useEffect, useState } from "react";
+import {
+  connectionStatus,
+  emit,
+  onStatus,
+  subscribe,
+} from "../socket";
+import type { ConnectionStatus } from "../socketEvents";
 
 export function useSocket() {
-  const [socket, setSocket] = useState<Socket | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [status, setStatus] = useState<ConnectionStatus>(connectionStatus());
 
-  useEffect(() => {
-    const s = io(SOCKET_URL, { transports: ['websocket'] });
-    s.on('connect', () => setConnected(true));
-    s.on('disconnect', () => setConnected(false));
-    setSocket(s);
-    return () => {
-      s.close();
-    };
-  }, []);
+  useEffect(() => onStatus(setStatus), []);
 
-  return { socket, connected };
+  const connected = status === "connected";
+
+  return { status, connected, subscribe, emit };
 }
