@@ -1,18 +1,21 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "./theme/tokens.css";
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-ui);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #1a1a1a;
-  color: #e0e0e0;
+  background: var(--color-base);
+  color: var(--color-text-hi);
 }
 
 #root {
   min-height: 100vh;
+}
+
+/* 键盘可访问性：金色虚线 focus 环（docs/UI-DESIGN.md §9） */
+:focus-visible {
+  outline: 2px dashed var(--color-gold);
+  outline-offset: 2px;
 }

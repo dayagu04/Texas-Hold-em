@@ -1,42 +1,50 @@
-import { useState } from 'react';
-import { useSocket } from './hooks/useSocket';
-import Login from './components/Login';
-import Lobby from './components/Lobby';
-import PokerTable from './components/PokerTable';
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AuthProvider, useAuth } from "./auth";
+import Login from "./components/Login";
+import GameSelection from "./components/GameSelection";
+import Lobby from "./components/Lobby";
+import TablePage from "./components/TablePage";
+import ReconnectBanner from "./components/ReconnectBanner";
+import type { ReactNode } from "react";
 
-type Page = 'login' | 'lobby' | 'table';
-
-function App() {
-  const { socket, connected } = useSocket();
-  const [page, setPage] = useState<Page>('login');
-  const [username, setUsername] = useState('');
-
-  const handleLogin = (user: string) => {
-    setUsername(user);
-    setPage('lobby');
-  };
-
-  const handleJoinTable = () => {
-    setPage('table');
-  };
-
-  if (!connected) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <p className="text-white text-xl">连接服务器中...</p>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {page === 'login' && <Login socket={socket} onLogin={handleLogin} />}
-      {page === 'lobby' && (
-        <Lobby socket={socket} username={username} onJoinTable={handleJoinTable} />
-      )}
-      {page === 'table' && <PokerTable socket={socket} username={username} />}
-    </>
-  );
+/** 路由守卫：未登录访问受保护路径自动跳 /login。 */
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { isAuthed } = useAuth();
+  return isAuthed ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <AuthProvider>
+      <ReconnectBanner />
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route
+          path="/"
+          element={
+            <RequireAuth>
+              <GameSelection />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/lobby"
+          element={
+            <RequireAuth>
+              <Lobby />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/table/:id"
+          element={
+            <RequireAuth>
+              <TablePage />
+            </RequireAuth>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  );
+}
