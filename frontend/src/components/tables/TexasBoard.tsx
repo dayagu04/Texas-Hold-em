@@ -4,6 +4,8 @@
  * 玩家围坐（自己永远屏幕底部中央），显示 SeatCard + 底牌（摊牌时高亮）。
  * M3 骨架版：布局 + 状态渲染；M4 精修发牌动画 / 赢家光晕。
  */
+import { useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
 import CardSprite from "../CardSprite";
 import SeatCard from "../SeatCard";
@@ -17,8 +19,16 @@ interface Props {
 }
 
 export default function TexasBoard({ state, privateState, mySid }: Props) {
-  const { players, payload, current_turn, stage } = state;
+  const { players, payload, current_turn, stage, hand_id } = state;
   const { pot, side_pots, community, button_seat, player_bets } = payload;
+
+  // 发牌动画触发：hand_id 变化时重置 dealKey 以触发 framer-motion 重新挂载
+  const prevHandId = useRef(hand_id);
+  useEffect(() => {
+    if (hand_id !== prevHandId.current) {
+      prevHandId.current = hand_id;
+    }
+  }, [hand_id]);
 
   // 自己在底部中央，其余玩家围绕桌沿分布
   const myIdx = players.findIndex((p) => p.sid === mySid);
@@ -44,11 +54,19 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
             </div>
           </div>
 
-          {/* 公共牌 */}
+          {/* 公共牌 — M4 翻牌动画：依次错峰翻转 */}
           {community.length > 0 && (
             <div className="flex gap-2">
               {community.map((c, i) => (
-                <CardSprite key={i} card={c} animate="flip" />
+                <motion.div
+                  key={`${hand_id}-comm-${i}`}
+                  initial={{ rotateY: -90, opacity: 0 }}
+                  animate={{ rotateY: 0, opacity: 1 }}
+                  transition={{ duration: 0.36, delay: i * 0.12, ease: "easeOut" }}
+                  style={{ transformStyle: "preserve-3d" }}
+                >
+                  <CardSprite card={c} />
+                </motion.div>
               ))}
             </div>
           )}
@@ -93,11 +111,18 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
                 isCurrentTurn={isCurrentTurn}
                 isMe={isMe}
               />
-              {/* 底牌（自己 / 摊牌） */}
+              {/* 底牌（自己 / 摊牌）— M4 发牌动画：hand_id 变化触发错峰飞入 */}
               {hole.length > 0 && (
                 <div className="mt-2 flex justify-center gap-1">
                   {hole.map((c, j) => (
-                    <CardSprite key={j} card={c} className="scale-75" />
+                    <motion.div
+                      key={`${hand_id}-${c.suit}${c.rank}`}
+                      initial={{ x: -60, y: -80, scale: 0.55, opacity: 0 }}
+                      animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+                      transition={{ duration: 0.22, delay: j * 0.08, ease: "easeOut" }}
+                    >
+                      <CardSprite card={c} className="scale-75" />
+                    </motion.div>
                   ))}
                 </div>
               )}
@@ -105,6 +130,22 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
               {p.seat === button_seat && (
                 <DealerButton className="absolute -top-2 -left-2" />
               )}
+              {/* 当前轮下注筹码 — M4 筹码入池动画 */}
+              <AnimatePresence mode="wait">
+                {bet > 0 && (
+                  <motion.div
+                    key={`bet-${p.sid}-${bet}`}
+                    initial={{ scale: 0.5, y: -10, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    exit={{ scale: 0.8, y: -20, opacity: 0 }}
+                    transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
+                    className="absolute -bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-gold/50 bg-base/90 px-3 py-1 text-xs font-bold text-gold shadow-card backdrop-blur-sm"
+                    style={{ fontFamily: "var(--font-mono)" }}
+                  >
+                    {bet}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           );
         })}

@@ -41,7 +41,7 @@ export default function CardSprite({ card, dim, animate, className = "" }: Props
   const animClass = animate
     ? animate === "flip"
       ? "animate-[flipCard_360ms_ease-out]"
-      : "animate-[slideDown_220ms_ease-out]"
+      : "animate-[dealCard_220ms_ease-out]"
     : "";
 
   if (!card) {
