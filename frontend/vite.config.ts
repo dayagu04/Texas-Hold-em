@@ -13,11 +13,11 @@ export default defineConfig({
     port: 5166,
     proxy: {
       '/socket.io': {
-        target: 'http://127.0.0.1:7999',
+        target: 'http://127.0.0.1:8000',
         ws: true,
       },
       '/api': {
-        target: 'http://127.0.0.1:7999',
+        target: 'http://127.0.0.1:8000',
       }
     }
   }
