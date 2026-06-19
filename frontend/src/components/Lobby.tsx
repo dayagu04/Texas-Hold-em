@@ -15,6 +15,7 @@ import { zhCN } from "../i18n/zh-CN";
 import * as api from "../api";
 import CreateTableModal from "./CreateTableModal";
 import ReconnectBanner from "./ReconnectBanner";
+import Avatar from "./Avatar";
 import type { GameType, LobbyTable, TableStatus } from "../types";
 
 const TAG_BG: Record<GameType, string> = {
@@ -34,18 +35,25 @@ export default function Lobby() {
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [points, setPoints] = useState<number | null>(null);
 
   // 进入大厅时建立 socket 连接（幂等）
   useEffect(() => {
     connectSocket();
   }, []);
 
-  // 加载头像
+  // 加载头像 + 积分
   useEffect(() => {
     api
       .me()
-      .then((res) => setAvatar(res.avatar ?? null))
-      .catch(() => setAvatar(null));
+      .then((res) => {
+        setAvatar(res.avatar ?? null);
+        setPoints(res.points ?? null);
+      })
+      .catch(() => {
+        setAvatar(null);
+        setPoints(null);
+      });
   }, []);
 
   useEffect(() => {
@@ -104,18 +112,22 @@ export default function Lobby() {
           </h1>
           <div className="flex items-center gap-3 text-text-lo">
             {/* 头像 */}
-            {avatar ? (
-              <img
-                src={avatar}
-                className="h-10 w-10 rounded-full object-cover object-top border border-gold/30"
-                alt={name ?? "头像"}
-              />
-            ) : (
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
-                {name?.[0]?.toUpperCase() ?? "?"}
-              </div>
-            )}
-            <span className="text-text-hi">{name}</span>
+            <Avatar
+              src={avatar}
+              name={name}
+              className="h-10 w-10 border border-gold/30"
+            />
+            <div className="flex flex-col leading-tight">
+              <span className="text-text-hi">{name}</span>
+              {points !== null && (
+                <span
+                  className="text-xs text-gold"
+                  style={{ fontFamily: "var(--font-mono)" }}
+                >
+                  积分 {points.toLocaleString("en-US")}
+                </span>
+              )}
+            </div>
             <button
               onClick={() => navigate("/profile")}
               className="rounded-card border border-rim px-3 py-1 text-sm transition hover:border-gold/50"

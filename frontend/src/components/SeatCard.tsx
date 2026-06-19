@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { zhCN } from "../i18n/zh-CN";
 import ChipStack from "./ChipStack";
+import Avatar from "./Avatar";
 import type { PublicPlayer } from "../types";
 
 interface Props {
@@ -26,7 +27,6 @@ export default function SeatCard({
   deadline,
   className = "",
 }: Props) {
-  const initials = player.name.slice(0, 2).toUpperCase();
   const statusLabel = player.status !== "active" ? zhCN.playerStatus[player.status] : "";
   const isWinner = player.status === "won";
 
@@ -76,28 +76,19 @@ export default function SeatCard({
               />
             </svg>
           )}
-          {/* 头像 */}
-          {player.avatar ? (
-            <img
-              src={player.avatar}
-              alt={player.name}
-              className={`h-10 w-10 rounded-full object-cover object-top ${
-                isMe
-                  ? "border-2 border-gold/70 shadow-[0_0_18px_rgba(201,161,74,0.6)]"
-                  : "border-2 border-rim/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
-              }`}
-            />
-          ) : (
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-full ${
-                isMe
-                  ? "border-2 border-gold/70 bg-gold text-base shadow-[0_0_18px_rgba(201,161,74,0.6)]"
-                  : "border-2 border-rim/60 bg-gradient-to-br from-rim/80 to-base/90 text-text-lo shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
-              } text-sm font-bold`}
-            >
-              {initials}
-            </div>
-          )}
+          {/* 头像（首字母圆形 / 真实头像，加载失败回退首字母） */}
+          <Avatar
+            src={player.avatar}
+            name={player.name}
+            className={`h-10 w-10 text-sm ${
+              isMe
+                ? "border-2 border-gold/70 shadow-[0_0_18px_rgba(201,161,74,0.6)]"
+                : "border-2 border-rim/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+            }`}
+            fallbackClassName={
+              isMe ? "!bg-gold !text-base" : "!bg-rim !text-text-lo"
+            }
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="truncate text-base font-semibold text-text-hi drop-shadow-sm">

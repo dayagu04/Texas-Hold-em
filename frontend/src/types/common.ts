@@ -137,4 +137,44 @@ export interface MeResponse {
   name: string;
   expires_at: string;
   avatar?: string | null;
+  points?: number; // 个人积分（后端 v2 新增）
+}
+
+/* ---- 个人中心：积分统计（GET /api/profile/stats）---- */
+export interface ProfileStats {
+  points: number;
+  hands_played: number;
+  hands_won: number;
+  total_net: number;
+}
+
+/* ---- 个人中心：对局历史（GET /api/profile/history）---- */
+// hole/board 是紧凑卡牌串，如 "8d3s" / "AhKsQc"，可能为空字符串。
+export type HandResultOutcome = "won" | "lost" | "folded";
+
+export interface HandHistoryMe {
+  hole: string;
+  total_bet: number;
+  net: number;
+  result: HandResultOutcome;
+}
+
+export interface HandHistoryPlayer {
+  name: string;
+  seat: number;
+  is_bot: boolean;
+  hole: string;
+  total_bet: number;
+  net: number;
+  result: HandResultOutcome;
+}
+
+export interface HandHistory {
+  hand_id: string;
+  game_type: GameType;
+  ended_at: string;
+  pot: number;
+  board: string;
+  me: HandHistoryMe;
+  players: HandHistoryPlayer[];
 }

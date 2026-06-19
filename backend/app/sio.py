@@ -412,8 +412,8 @@ async def table_start_hand(sid, data):
         await _emit_error(sid, "FORBIDDEN", "人数不足", {"table_id": table_id})
         return
 
+    _snapshot_chips(table_id)  # 扣盲注/底注前快照，net 才能含盲注损失（零和）
     engine.start_hand()
-    _snapshot_chips(table_id)
     await _broadcast_table_state(table_id)
     await _run_bot_loop(table_id)
 
@@ -741,6 +741,7 @@ async def _auto_start_next_hand(table_id: str, delay_ms: int):
         await asyncio.sleep(delay_ms / 1000.0)
         engine = lobby.get_table(table_id)
         if engine and engine.can_start() and not engine.hand_in_progress:
+            _snapshot_chips(table_id)  # 扣盲注/底注前快照（零和）
             engine.start_hand()
             await _broadcast_table_state(table_id)
             await _run_bot_loop(table_id)
@@ -770,8 +771,8 @@ async def _maybe_auto_start(table_id: str):
         return
     log(f"[auto_start] table={table_id}, humans={len(humans)} all ready, starting")
     _cancel_auto_start_timer(table_id)
+    _snapshot_chips(table_id)  # 扣盲注/底注前快照（零和）
     engine.start_hand()
-    _snapshot_chips(table_id)
     await _broadcast_table_state(table_id)
     await _run_bot_loop(table_id)
 

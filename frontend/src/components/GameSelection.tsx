@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "../auth";
 import { zhCN } from "../i18n/zh-CN";
 import LoginModal from "./LoginModal";
+import Avatar from "./Avatar";
 import * as api from "../api";
 import type { GameType } from "../types";
 import { MOTION } from "../theme/motion";
@@ -53,14 +54,21 @@ export default function GameSelection() {
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
+  const [points, setPoints] = useState<number | null>(null);
 
-  // 加载头像
+  // 加载头像 + 积分
   useEffect(() => {
     if (isAuthed) {
       api
         .me()
-        .then((res) => setAvatar(res.avatar ?? null))
-        .catch(() => setAvatar(null));
+        .then((res) => {
+          setAvatar(res.avatar ?? null);
+          setPoints(res.points ?? null);
+        })
+        .catch(() => {
+          setAvatar(null);
+          setPoints(null);
+        });
     }
   }, [isAuthed]);
 
@@ -100,18 +108,22 @@ export default function GameSelection() {
               // 已登录：头像 + 用户名 + 个人中心 + 退出
               <div className="flex items-center gap-3">
                 {/* 头像 */}
-                {avatar ? (
-                  <img
-                    src={avatar}
-                    className="h-10 w-10 rounded-full object-cover object-top border border-gold/30"
-                    alt={name ?? "头像"}
-                  />
-                ) : (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
-                    {name?.[0]?.toUpperCase() ?? "?"}
-                  </div>
-                )}
-                <span className="text-text-hi">{name}</span>
+                <Avatar
+                  src={avatar}
+                  name={name}
+                  className="h-10 w-10 border border-gold/30"
+                />
+                <div className="flex flex-col leading-tight">
+                  <span className="text-text-hi">{name}</span>
+                  {points !== null && (
+                    <span
+                      className="text-xs text-gold"
+                      style={{ fontFamily: "var(--font-mono)" }}
+                    >
+                      积分 {points.toLocaleString("en-US")}
+                    </span>
+                  )}
+                </div>
                 <button
                   onClick={() => navigate("/profile")}
                   className="rounded-card border border-rim px-3 py-1 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"

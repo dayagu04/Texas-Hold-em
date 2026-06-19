@@ -2,7 +2,14 @@
  * 后端 REST 调用 · 对齐 docs/API-CONTRACT.md §1。
  * token 存 localStorage（ARCHITECTURE §4 二选一）。
  */
-import type { LobbyTable, LoginResponse, MeResponse, SocketError } from "./types";
+import type {
+  HandHistory,
+  LobbyTable,
+  LoginResponse,
+  MeResponse,
+  ProfileStats,
+  SocketError,
+} from "./types";
 
 /** 后端地址。空字符串 → 同源 / vite proxy（开发默认）。 */
 export const API_BASE: string = import.meta.env.VITE_API_BASE ?? "";
@@ -71,6 +78,23 @@ export function getLobby(): Promise<{ tables: LobbyTable[] }> {
     method: "GET",
     auth: true,
   });
+}
+
+/** GET /api/profile/stats — 积分统计（需鉴权） */
+export function getStats(): Promise<ProfileStats> {
+  return request<ProfileStats>("/api/profile/stats", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+/** GET /api/profile/history — 对局历史（需鉴权，limit≤50） */
+export function getHistory(limit = 20): Promise<{ history: HandHistory[] }> {
+  const safe = Math.min(Math.max(1, limit), 50);
+  return request<{ history: HandHistory[] }>(
+    `/api/profile/history?limit=${safe}`,
+    { method: "GET", auth: true },
+  );
 }
 
 /** POST /api/profile/avatar - 上传头像 */
