@@ -33,6 +33,10 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
   const [smallBlind, setSmallBlind] = useState(10);
   const [ante, setAnte] = useState(10);
   const [spectatable, setSpectatable] = useState(true);
+  const [gameMode, setGameMode] = useState<"single" | "continuous" | "limited">(
+    "continuous",
+  );
+  const [maxHands, setMaxHands] = useState(10);
   const [bots, setBots] = useState<Record<number, BotLevel | null>>({});
   const [isCreating, setIsCreating] = useState(false);
 
@@ -73,6 +77,9 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
       .filter(([, lv]) => lv !== null)
       .map(([seat, level]) => ({ seat: Number(seat), level: level! }));
     if (botList.length) payload.bots = botList;
+
+    payload.game_mode = gameMode;
+    if (gameMode === "limited") payload.max_hands = maxHands;
 
     setIsCreating(true);
     emit("lobby:create_table", payload);
@@ -181,6 +188,58 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
                     disabled={gameType === "guandan"}
                     className="w-full rounded-card border border-rim bg-base px-3 py-2 text-text-hi disabled:opacity-50"
                   />
+                </div>
+                {/* 游戏模式 */}
+                <div>
+                  <label className="mb-1 block text-sm text-text-lo">
+                    游戏模式
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-text-hi">
+                      <input
+                        type="radio"
+                        name="game-mode"
+                        checked={gameMode === "single"}
+                        onChange={() => setGameMode("single")}
+                        className="accent-gold"
+                      />
+                      单局模式
+                      <span className="text-text-lo">（打完一局后手动开下一局）</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-text-hi">
+                      <input
+                        type="radio"
+                        name="game-mode"
+                        checked={gameMode === "continuous"}
+                        onChange={() => setGameMode("continuous")}
+                        className="accent-gold"
+                      />
+                      连续模式
+                      <span className="text-text-lo">（自动开下一局，直到人数不足）</span>
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-text-hi">
+                      <input
+                        type="radio"
+                        name="game-mode"
+                        checked={gameMode === "limited"}
+                        onChange={() => setGameMode("limited")}
+                        className="accent-gold"
+                      />
+                      限定局数
+                      {gameMode === "limited" && (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={maxHands}
+                            onChange={(e) => setMaxHands(Number(e.target.value))}
+                            min={1}
+                            className="w-16 rounded-card border border-rim bg-base px-2 py-1 text-text-hi"
+                          />
+                          局
+                        </span>
+                      )}
+                    </label>
+                  </div>
                 </div>
                 {(gameType === "texas" || gameType === "brag") && (
                   <div>

@@ -9,7 +9,8 @@ import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
 import { emit, subscribe } from "../socket";
 import Countdown from "./Countdown";
-import type { ActionLog, ChatMessage, CurrentTurn, GameType, LegalAction, PrivateState, PublicPlayer } from "../types";
+import HandEndModal from "./HandEndModal";
+import type { ActionLog, ChatMessage, CurrentTurn, GameType, HandEnd, LegalAction, PrivateState, PublicPlayer } from "../types";
 
 /* 各玩法最小开局人数（对齐后端 min_players 校验）。 */
 const MIN_PLAYERS: Record<GameType, number> = {
@@ -48,6 +49,8 @@ export default function TableShell({
   const [raiseAmount, setRaiseAmount] = useState(0);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [liveAnnounce, setLiveAnnounce] = useState("");
+  const [showHandEnd, setShowHandEnd] = useState(false);
+  const [handEndData, setHandEndData] = useState<HandEnd | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isMyTurn = currentTurn?.sid === mySid;
@@ -69,6 +72,15 @@ export default function TableShell({
   useEffect(() => {
     const off = subscribe("table:chat", (msg) => {
       setChatMessages((prev) => [...prev, msg]);
+    });
+    return off;
+  }, []);
+
+  // 订阅摊牌结算：收到 table:hand_end 弹出结算浮层。
+  useEffect(() => {
+    const off = subscribe("table:hand_end", (data) => {
+      setHandEndData(data);
+      setShowHandEnd(true);
     });
     return off;
   }, []);
@@ -208,6 +220,20 @@ export default function TableShell({
       <div className="sr-only" aria-live="polite" aria-atomic="true">
         {liveAnnounce}
       </div>
+
+      {/* 摊牌结算浮层 */}
+      {showHandEnd && handEndData && (
+        <HandEndModal
+          results={handEndData.results}
+          players={players}
+          nextHandIn={handEndData.next_hand_in}
+          onClose={() => setShowHandEnd(false)}
+          onLeave={() => {
+            emit("lobby:leave_table", { table_id: tableId });
+            navigate("/lobby");
+          }}
+        />
+      )}
     </div>
   );
 }

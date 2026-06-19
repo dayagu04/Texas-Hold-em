@@ -111,6 +111,8 @@ export interface CreateTablePayload {
   ante?: number; // brag
   bots?: { seat: number; level: BotLevel }[];
   spectatable?: boolean;
+  game_mode?: "single" | "continuous" | "limited"; // 默认 continuous（后端兜底）
+  max_hands?: number; // game_mode=limited 时必填
 }
 
 /* ---- 聊天（API-CONTRACT §2.4 table:chat S→C）---- */
