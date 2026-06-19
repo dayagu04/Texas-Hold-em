@@ -179,7 +179,7 @@ await sio.emit('table:hand_end', {
 
 - [ ] 端到端：4 真人玩家分别从 4 浏览器登录，玩一局掼蛋打完结算。
 - [ ] 混合：1 真人 + 3 bot 玩炸金花，bot 不卡顿。
-- [ ] 抽象：新增一个假玩法（占位，不实现 UI），仅靠后端和契约就能在大厅中创建并 `start_hand` 报错（`engine.can_start=False`）。
+- [ ] 抽象：注册一个未知玩法类型，后端在 `create_table` 阶段即拒绝（抛 `ValueError`，前端收到 `error`）。契约能识别并拒绝未注册玩法，错误尽早暴露，不让废桌进大厅。
 - [ ] 文档：每个 agent 在自己的代码内补 README 段落，指回 [docs/](.) 对应章节。
 
 ## 4. FAQ

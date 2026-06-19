@@ -125,8 +125,8 @@ def test_texas_normal_more_aggressive_than_easy():
 
 #### 4. 抽象验证（PRD 共同验收）
 
-- 新增假玩法（占位，不实现 UI）
-- ✅ 大厅能创建，`start_hand` 报错 `engine.can_start=False`
+- 注册一个未知玩法类型
+- ✅ 后端在 `create_table` 阶段即拒绝（抛 `ValueError`），错误尽早暴露
 
 ### B.3 验收标准
 
@@ -267,7 +267,7 @@ services:
 
 - [ ] 端到端：4 真人玩家分别从 4 浏览器登录，玩一局掼蛋打完结算
 - [ ] 混合：1 真人 + 3 bot 玩炸金花，bot 不卡顿
-- [ ] 抽象：新增假玩法，大厅能创建，`start_hand` 报错
+- [ ] 抽象：未知玩法在 `create_table` 即被拒绝（抛 `ValueError`）
 - [ ] 文档：每个 agent 在代码内补 README 段落，指回 docs/
 
 ---
