@@ -36,11 +36,40 @@ export default function BragBoard({ state, privateState, mySid }: Props) {
 
   return (
     <div className="relative h-full">
-      {/* 圆桌 */}
-      <div className="absolute inset-10 rounded-full border-8 border-rim bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.6)]">
-        {/* 中央池底 */}
+      {/* 圆桌：多层材质叠加 + 立体桌沿 */}
+      <div
+        className="absolute inset-10 rounded-full bg-felt"
+        style={{
+          boxShadow: `
+            inset 0 0 0 1px var(--table-edge-inner),
+            inset 0 0 0 5px var(--table-edge-mid),
+            inset 0 1px 2px 5px var(--table-edge-highlight),
+            inset 0 0 0 8px var(--table-edge-outer),
+            inset 0 0 120px rgba(0, 0, 0, 0.7),
+            0 25px 60px rgba(0, 0, 0, 0.6)
+          `,
+        }}
+      >
+        {/* 桌面中心聚光层 */}
+        <div className="pointer-events-none absolute inset-0 rounded-full bg-table-spotlight" />
+        {/* 桌面暗角层（四周压暗） */}
+        <div className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_center,transparent_48%,rgba(0,0,0,0.45)_100%)]" />
+        {/* 中央池底 - 精致化 */}
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-3">
-          <div className="rounded-panel border border-gold/50 bg-base/80 px-6 py-3 text-center shadow-elev backdrop-blur-sm">
+          <div
+            className="rounded-panel border border-gold/60 bg-base/85 px-6 py-3 text-center backdrop-blur-sm"
+            style={{
+              boxShadow: `
+                0 0 24px rgba(201, 161, 74, 0.35),
+                inset 0 1px 1px rgba(201, 161, 74, 0.25),
+                0 12px 40px rgba(0, 0, 0, 0.55)
+              `,
+              background: `
+                radial-gradient(ellipse at 50% 30%, rgba(201, 161, 74, 0.08) 0%, transparent 60%),
+                rgba(13, 15, 14, 0.85)
+              `,
+            }}
+          >
             <div className="mb-1 text-xs text-text-lo">{zhCN.table.pot}</div>
             <div
               className="text-3xl font-bold text-gold"
@@ -61,7 +90,15 @@ export default function BragBoard({ state, privateState, mySid }: Props) {
               <span className="font-mono">{current_bet}</span>
             </div>
           </div>
-          <div className="rounded-full border border-rim bg-base/60 px-4 py-1 text-sm text-text-hi backdrop-blur-sm">
+          <div
+            className="rounded-full border border-gold/70 bg-base/70 px-5 py-1.5 text-sm font-semibold text-gold backdrop-blur-sm"
+            style={{
+              boxShadow: `
+                0 0 12px rgba(201, 161, 74, 0.25),
+                inset 0 1px 0 rgba(201, 161, 74, 0.2)
+              `,
+            }}
+          >
             {stageText}
           </div>
         </div>

@@ -2,6 +2,7 @@
  * 座位卡（docs/UI-DESIGN.md §7.1）。
  * 玩家头像（首字母圆形）、昵称、筹码、当前下注 chip、状态徽标（folded / all-in / 🤖level）。
  * M3 骨架版：纯文本 + 状态样式；M4 精修头像渐变 / Bot 思考闪烁动画。
+ * M4.5 精修：悬浮质感卡片 + 渐变底 + 毛玻璃 + 双层描边 + 立体投影 + 头像放大光晕 + 轮到你金色脉冲动画。
  */
 import { zhCN } from "../i18n/zh-CN";
 import ChipStack from "./ChipStack";
@@ -28,28 +29,30 @@ export default function SeatCard({
 
   return (
     <div
-      className={`relative min-w-[120px] rounded-panel border ${
+      className={`relative min-w-[136px] rounded-xl backdrop-blur-sm ${
         isMe
-          ? "border-gold bg-elev/90"
+          ? "border-2 border-gold bg-seat-card shadow-seat"
           : isCurrentTurn
-            ? "border-gold-soft bg-elev/80 shadow-[0_0_8px_var(--color-gold)]"
-            : "border-rim bg-elev/70"
-      } p-3 shadow-card transition ${isWinner ? "animate-[winnerGlow_1200ms_ease-in-out]" : ""} ${className}`}
+            ? "animate-[activePulse_2s_ease-in-out_infinite] border-2 border-gold-soft bg-seat-card"
+            : "border border-rim/80 bg-seat-card shadow-seat"
+      } p-3.5 transition-all duration-base ${isWinner ? "animate-[winnerGlow_1200ms_ease-in-out]" : ""} ${className}`}
     >
       {/* 头像（首字母圆形） */}
-      <div className="mb-2 flex items-center gap-2">
+      <div className="mb-2.5 flex items-center gap-2.5">
         <div
-          className={`flex h-8 w-8 items-center justify-center rounded-full ${
-            isMe ? "bg-gold text-base" : "bg-rim text-text-lo"
-          } text-xs font-bold`}
+          className={`flex h-12 w-12 items-center justify-center rounded-full ${
+            isMe
+              ? "border-2 border-gold/70 bg-gold text-base shadow-[0_0_18px_rgba(201,161,74,0.6)]"
+              : "border-2 border-rim/60 bg-gradient-to-br from-rim/80 to-base/90 text-text-lo shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+          } text-sm font-bold`}
         >
           {initials}
         </div>
-        <div className="flex-1">
-          <div className="truncate text-sm font-medium text-text-hi">
+        <div className="flex-1 min-w-0">
+          <div className="truncate text-base font-semibold text-text-hi drop-shadow-sm">
             {player.name}
             {player.is_bot && (
-              <span className="ml-1 text-xs text-text-lo" title={player.bot_level}>
+              <span className="ml-1.5 text-xs text-gold/80" title={player.bot_level}>
                 🤖
               </span>
             )}
@@ -57,34 +60,44 @@ export default function SeatCard({
         </div>
       </div>
 
-      {/* 筹码 */}
-      <div className="mb-1 text-xs text-text-lo">
-        筹码：
-        <span className="ml-1 font-bold text-gold" style={{ fontFamily: "var(--font-mono)" }}>
-          {player.chips}
+      {/* 筹码数（千位分隔 + 金色醒目） */}
+      <div className="mb-1.5 flex items-center gap-1 text-xs text-text-lo">
+        <span className="inline-block h-3 w-3 rounded-full border border-gold/60 bg-gold/20" title="筹码" />
+        <span className="font-medium text-gold" style={{ fontFamily: "var(--font-mono)" }}>
+          {player.chips.toLocaleString("en-US")}
         </span>
       </div>
 
-      {/* 当前下注（本街） */}
+      {/* 当前下注显示在卡片内（小字，如果 > 0） */}
+      {currentBet !== undefined && currentBet > 0 && (
+        <div className="mb-1 text-xs text-gold/70">
+          下注：
+          <span className="ml-0.5 font-semibold text-gold" style={{ fontFamily: "var(--font-mono)" }}>
+            {currentBet.toLocaleString("en-US")}
+          </span>
+        </div>
+      )}
+
+      {/* 当前下注筹码堆（桌面筹码，保留在卡片外侧） */}
       {currentBet !== undefined && currentBet > 0 && (
         <div className="absolute -top-2 -right-2">
           <ChipStack amount={currentBet} />
         </div>
       )}
 
-      {/* 状态徽标 */}
+      {/* 状态徽标（folded / all_in / sitting_out 全屏遮罩） */}
       {statusLabel && (
         <div
-          className={`absolute inset-0 flex items-center justify-center rounded-panel ${
+          className={`absolute inset-0 flex items-center justify-center rounded-xl ${
             player.status === "folded"
-              ? "bg-base/80"
+              ? "border border-danger/40 bg-base/85 backdrop-blur-sm"
               : player.status === "all_in"
-                ? "bg-gold/20"
-                : "bg-elev/60"
+                ? "border border-gold/50 bg-gold/15 backdrop-blur-sm"
+                : "border border-rim/50 bg-elev/70 backdrop-blur-sm"
           }`}
         >
           <span
-            className={`text-sm font-bold ${
+            className={`text-base font-bold drop-shadow-md ${
               player.status === "folded"
                 ? "text-danger"
                 : player.status === "all_in"
@@ -99,7 +112,7 @@ export default function SeatCard({
 
       {/* Bot 思考动画（回合中 + bot） */}
       {player.is_bot && isCurrentTurn && (
-        <div className="absolute -top-2 -right-2 rounded-full bg-base/90 px-2 py-0.5 text-xs text-gold">
+        <div className="absolute -top-2 -left-2 rounded-full border border-gold/40 bg-base/95 px-2 py-0.5 text-xs font-semibold text-gold shadow-[0_0_12px_rgba(201,161,74,0.4)]">
           <span className="animate-[botThinking_1s_ease-in-out_infinite]">...</span>
         </div>
       )}

@@ -40,14 +40,41 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
 
   return (
     <div className="relative h-full">
-      {/* 椭圆桌面：金属内沿高光 + 更柔和暗角 */}
-      <div className="absolute inset-10 rounded-[50%] border-8 border-rim bg-felt shadow-[inset_0_2px_3px_rgba(201,161,74,0.2),inset_0_0_80px_rgba(0,0,0,0.65),0_20px_50px_rgba(0,0,0,0.5)]">
-        {/* 桌面暗角层（柔和聚光，叠在毡布上） */}
-        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.4)_100%)]" />
+      {/* 椭圆桌面：多层材质叠加 + 立体桌沿 */}
+      <div
+        className="absolute inset-10 rounded-[50%] bg-felt"
+        style={{
+          boxShadow: `
+            inset 0 0 0 1px var(--table-edge-inner),
+            inset 0 0 0 5px var(--table-edge-mid),
+            inset 0 1px 2px 5px var(--table-edge-highlight),
+            inset 0 0 0 8px var(--table-edge-outer),
+            inset 0 0 120px rgba(0, 0, 0, 0.7),
+            0 25px 60px rgba(0, 0, 0, 0.6)
+          `,
+        }}
+      >
+        {/* 桌面中心聚光层 */}
+        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-table-spotlight" />
+        {/* 桌面暗角层（四周压暗） */}
+        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-[radial-gradient(ellipse_at_center,transparent_48%,rgba(0,0,0,0.45)_100%)]" />
         {/* 中央区：公共牌 + pot */}
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-4">
-          {/* pot */}
-          <div className="rounded-panel border border-gold/50 bg-base/80 px-6 py-3 text-center shadow-elev backdrop-blur-sm">
+          {/* pot - 精致金色光晕 + 立体描边 + 微妙渐变底 */}
+          <div
+            className="rounded-panel border border-gold/60 bg-base/85 px-6 py-3 text-center backdrop-blur-sm"
+            style={{
+              boxShadow: `
+                0 0 24px rgba(201, 161, 74, 0.35),
+                inset 0 1px 1px rgba(201, 161, 74, 0.25),
+                0 12px 40px rgba(0, 0, 0, 0.55)
+              `,
+              background: `
+                radial-gradient(ellipse at 50% 30%, rgba(201, 161, 74, 0.08) 0%, transparent 60%),
+                rgba(13, 15, 14, 0.85)
+              `,
+            }}
+          >
             <div className="mb-1 text-xs text-text-lo">{zhCN.table.pot}</div>
             <div
               className="text-3xl font-bold text-gold"
@@ -57,16 +84,19 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
             </div>
           </div>
 
-          {/* 公共牌 — M4 翻牌动画：依次错峰翻转 */}
+          {/* 公共牌 — M4 翻牌动画：依次错峰翻转，增强浮起投影 */}
           {community.length > 0 && (
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               {community.map((c, i) => (
                 <motion.div
                   key={`${hand_id}-comm-${i}`}
                   initial={{ rotateY: -90, opacity: 0 }}
                   animate={{ rotateY: 0, opacity: 1 }}
                   transition={{ duration: 0.36, delay: i * 0.12, ease: "easeOut" }}
-                  style={{ transformStyle: "preserve-3d" }}
+                  style={{
+                    transformStyle: "preserve-3d",
+                    filter: "drop-shadow(0 6px 14px rgba(0, 0, 0, 0.5))",
+                  }}
                 >
                   <CardSprite card={c} />
                 </motion.div>
@@ -81,8 +111,16 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
             </div>
           )}
 
-          {/* 阶段 */}
-          <div className="rounded-full border border-rim bg-base/60 px-4 py-1 text-sm text-text-hi backdrop-blur-sm">
+          {/* 阶段标签 - 精致金色徽章 */}
+          <div
+            className="rounded-full border border-gold/70 bg-base/70 px-5 py-1.5 text-sm font-semibold text-gold backdrop-blur-sm"
+            style={{
+              boxShadow: `
+                0 0 12px rgba(201, 161, 74, 0.25),
+                inset 0 1px 0 rgba(201, 161, 74, 0.2)
+              `,
+            }}
+          >
             {stageText}
           </div>
         </div>
@@ -97,6 +135,10 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
           const isMe = p.sid === mySid;
           const isCurrentTurn = current_turn?.sid === p.sid;
           const bet = player_bets[p.sid] ?? 0;
+
+          // 下注筹码外推向量：沿远离中心方向偏移,避免侵入底池区
+          const betOutwardX = Math.cos(angle) * 10; // 10% 外推距离
+          const betOutwardY = Math.sin(angle) * 10;
 
           // 底牌：自己从 privateState 取，摊牌时从 state 取（暂简化）
           let hole: Card[] = [];
@@ -133,7 +175,7 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
               {p.seat === button_seat && (
                 <DealerButton className="absolute -top-2 -left-2" />
               )}
-              {/* 当前轮下注筹码 — M4 筹码堆叠 + 抛入动画 + 加注金色脉冲（Task 4） */}
+              {/* 当前轮下注筹码 — M4 筹码外推(朝外不侵入中心)+ 抛入动画 + 加注金色脉冲 */}
               <AnimatePresence mode="wait">
                 {bet > 0 && (
                   <motion.div
@@ -146,8 +188,13 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
                       ease: [0.2, 0.8, 0.3, 1],
                       opacity: { duration: 0.3 },
                     }}
-                    className="absolute -bottom-9 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-gold/70 bg-base/95 px-3 py-1.5 text-xs font-bold text-gold shadow-[0_0_0_rgba(231,200,122,0),var(--shadow-chip)] backdrop-blur-sm animate-[raisePulse_560ms_ease-out]"
-                    style={{ fontFamily: "var(--font-mono)" }}
+                    className="absolute flex items-center gap-2 rounded-full border border-gold/70 bg-base/95 px-3 py-1.5 text-xs font-bold text-gold shadow-[0_0_0_rgba(231,200,122,0),var(--shadow-chip)] backdrop-blur-sm animate-[raisePulse_560ms_ease-out]"
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      left: `calc(50% + ${betOutwardX}%)`,
+                      top: `calc(50% + ${betOutwardY}%)`,
+                      transform: "translate(-50%, -50%)",
+                    }}
                   >
                     <ChipStack amount={bet} size={15} />
                     <span>{bet}</span>

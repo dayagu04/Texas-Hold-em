@@ -56,6 +56,16 @@
     0 10px 22px rgba(0, 0, 0, 0.45);
   /* 筹码堆叠投影（贴桌接触影 + 短柔影） */
   --shadow-chip: 0 1px 1px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.4);
+  /* 座位卡悬浮投影（更深、更柔和，明显浮在桌面上） */
+  --shadow-seat:
+    0 3px 8px rgba(0, 0, 0, 0.7),
+    0 8px 20px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(201, 161, 74, 0.2) inset;
+  /* 庄家按钮外光晕（金色发光徽章） */
+  --shadow-dealer:
+    0 0 20px rgba(201, 161, 74, 0.7),
+    0 0 10px rgba(231, 200, 122, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.6);
 
   /* ---- 动效时长（var() 引用；framer-motion 数值见 theme/motion.ts，保持一致） ---- */
   --duration-fast: 120ms; /* duration-fast：面板淡入 */
@@ -72,8 +82,55 @@
  * 非 utility 的复合令牌（渐变无法走 --color-*，单独定义 + 自定义 utility）。
  */
 :root {
-  --felt: radial-gradient(ellipse at center, #1f6f4f 0%, #0d3a2a 70%, #061d14 100%);
+  /* 毡布基底：深绿径向 */
+  --felt-base: radial-gradient(ellipse at center, #1f6f4f 0%, #0d3a2a 70%, #061d14 100%);
+
+  /* 毡布纤维纹理：微观织物感，细密交织斜纹 */
+  --felt-texture:
+    repeating-linear-gradient(
+      42deg,
+      transparent 0,
+      transparent 2px,
+      rgba(255, 255, 255, 0.012) 2px,
+      rgba(255, 255, 255, 0.012) 4px
+    ),
+    repeating-linear-gradient(
+      -42deg,
+      transparent 0,
+      transparent 2px,
+      rgba(0, 0, 0, 0.018) 2px,
+      rgba(0, 0, 0, 0.018) 4px
+    );
+
+  /* 毡布受光：顶部亮、底部暗的定向渐变，模拟上方光源照射 */
+  --felt-lighting: linear-gradient(165deg, rgba(255, 255, 255, 0.08) 0%, transparent 35%, rgba(0, 0, 0, 0.2) 100%);
+
+  /* 桌沿多层描边色：真实赌桌的皮革/木质/金属感 */
+  --table-edge-inner: #1a0f08; /* 内侧深棕（接触毡布边界） */
+  --table-edge-mid: #4a3520; /* 中层暖棕皮革 */
+  --table-edge-highlight: rgba(201, 161, 74, 0.35); /* 金属高光线 */
+  --table-edge-outer: #0d0703; /* 外侧近黑（桌子外沿） */
+
+  /* 中心聚光：桌心柔和高光，突出底池+公共牌焦点区 */
+  --table-spotlight: radial-gradient(ellipse 55% 45% at 50% 48%, rgba(255, 255, 255, 0.06) 0%, transparent 60%);
+
   --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+
+  /* 座位卡渐变底：微妙暗部渐变（顶部略亮、底部略暗，模拟受光）+ 半透明毛玻璃效果 */
+  --seat-card-bg: linear-gradient(
+    155deg,
+    rgba(22, 26, 24, 0.95) 0%,
+    rgba(22, 26, 24, 0.92) 48%,
+    rgba(13, 15, 14, 0.94) 100%
+  );
+
+  /* 庄家按钮金色径向渐变（中心亮、边缘暗，立体感） */
+  --dealer-bg: radial-gradient(
+    ellipse at 35% 28%,
+    rgba(231, 200, 122, 0.95) 0%,
+    rgba(201, 161, 74, 0.88) 42%,
+    rgba(169, 135, 62, 0.92) 100%
+  );
 
   /* 牌面微暖渐变：顶部偏亮高光 → 中段米白 → 底部略压暗，模拟纸面受光（CardSprite 正面底色） */
   --card-face-bg: linear-gradient(
@@ -111,9 +168,10 @@
     radial-gradient(ellipse at 50% 42%, #43361f 0%, #2a2012 55%, #1c1409 100%);
 }
 
-/* felt 桌面背景：bg-felt */
+/* felt 桌面背景(复合)：基底+纤维+受光叠层 */
 @utility bg-felt {
-  background: var(--felt);
+  background: var(--felt-base);
+  background-image: var(--felt-texture), var(--felt-lighting), var(--felt-base);
 }
 
 /* 全屏暗角：bg-vignette（叠在深底之上） */
@@ -135,6 +193,21 @@
 /* 牌面光泽叠层：bg-card-gloss（绝对定位覆盖层用，给正面加左上高光） */
 @utility bg-card-gloss {
   background: var(--card-gloss);
+}
+
+/* 中心聚光叠层：bg-table-spotlight（桌心高光，绝对定位覆盖层用） */
+@utility bg-table-spotlight {
+  background: var(--table-spotlight);
+}
+
+/* 座位卡渐变底：bg-seat-card */
+@utility bg-seat-card {
+  background: var(--seat-card-bg);
+}
+
+/* 庄家按钮金色渐变底：bg-dealer-gold */
+@utility bg-dealer-gold {
+  background: var(--dealer-bg);
 }
 
 /* ---- Keyframes（docs/UI-DESIGN.md §8 动效清单） ---- */
@@ -241,5 +314,25 @@
   }
   100% {
     box-shadow: 0 0 0 0 rgba(231, 200, 122, 0);
+  }
+}
+
+/* 轮到你时金色边框脉冲（座位卡） */
+@keyframes activePulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 20px rgba(231, 200, 122, 0.6),
+      0 3px 8px rgba(0, 0, 0, 0.7),
+      0 8px 20px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(201, 161, 74, 0.2) inset;
+  }
+  50% {
+    box-shadow:
+      0 0 35px rgba(231, 200, 122, 0.9),
+      0 0 15px rgba(231, 200, 122, 0.5),
+      0 3px 8px rgba(0, 0, 0, 0.7),
+      0 8px 20px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(231, 200, 122, 0.4) inset;
   }
 }
