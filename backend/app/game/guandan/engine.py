@@ -46,7 +46,8 @@ class GuandanEngine:
     min_players = 4
     max_players = 4  # 固定 4 人
 
-    def __init__(self, table_id: str, name: str):
+    def __init__(self, table_id: str, name: str,
+                 game_mode: str = "continuous", max_hands: int | None = None):
         self.id = table_id
         self.name = name
         self.players: dict[str, Player] = {}
@@ -59,6 +60,11 @@ class GuandanEngine:
         self.rankings: list[dict] = []  # [{"sid", "rank"}, ...]
         self.hand_in_progress = False
         self.hand_id = 0
+        # 多局模式（#006）：single / continuous / limited
+        self.game_mode = game_mode
+        self.max_hands = max_hands
+        self.hands_played = 0
+        self.next_hand_in = 0
 
     # ---- GameEngine 接口实现 ----
     def add_player(self, sid: str, name: str, seat: int,
@@ -222,8 +228,18 @@ class GuandanEngine:
             "table_id": self.id,
             "hand_id": str(self.hand_id),
             "results": self.hand_result if hasattr(self, 'hand_result') else [],
-            "next_hand_in": 0,  # 0 表示等手动 start_hand
+            "next_hand_in": self.next_hand_in,
         }
+
+    def _compute_next_hand_in(self) -> int:
+        """根据游戏模式决定下一局倒计时（ms）。0 表示等手动 start_hand。"""
+        if self.game_mode == "single":
+            return 0
+        if self.game_mode == "limited":
+            if self.max_hands is not None and self.hands_played >= self.max_hands:
+                return 0
+            return 5000 if self.can_start() else 0
+        return 5000 if self.can_start() else 0
 
     def next_bot_action(self) -> tuple[str, str, dict] | None:
         """若当前回合是 Bot，返回其决策。"""
@@ -299,12 +315,15 @@ class GuandanEngine:
         self.current_turn = None
         self.stage = Stage.SETTLING
         self.hand_in_progress = False
+        self.hands_played += 1
 
         # 剩余未清手的玩家按座位顺序排名
         for p in self._seated_players():
             if p.rank is None:
                 p.rank = len(self.rankings) + 1
                 self.rankings.append({"sid": p.sid, "rank": p.rank})
+
+        self.next_hand_in = self._compute_next_hand_in()
 
         # 计算结果
         rank_by_sid = {r["sid"]: r["rank"] for r in self.rankings}

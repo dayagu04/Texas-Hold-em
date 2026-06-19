@@ -23,6 +23,8 @@ class Lobby:
         small_blind: int | None = None,
         ante: int | None = None,
         spectatable: bool = True,
+        game_mode: str = "continuous",
+        max_hands: int | None = None,
     ) -> str:
         """创建房间，返回 table_id。"""
         table_id = f"t_{uuid.uuid4().hex[:8]}"
@@ -34,11 +36,15 @@ class Lobby:
                 small_blind=small_blind or 10,
                 initial_chips=initial_chips,
                 max_seats=seats,
+                game_mode=game_mode,
+                max_hands=max_hands,
             )
         elif game_type == "guandan":
             engine = GuandanEngine(
                 table_id=table_id,
                 name=name,
+                game_mode=game_mode,
+                max_hands=max_hands,
             )
         elif game_type == "brag":
             engine = BragEngine(
@@ -47,6 +53,8 @@ class Lobby:
                 ante=ante or 10,
                 initial_chips=initial_chips,
                 max_seats=seats,
+                game_mode=game_mode,
+                max_hands=max_hands,
             )
         else:
             raise ValueError(f"未知玩法: {game_type}")

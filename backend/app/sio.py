@@ -19,6 +19,8 @@ name_to_sid: dict[str, str] = {}
 disconnect_timers: dict[str, asyncio.Task] = {}
 # table_id -> asyncio.Task (回合超时计时器)
 turn_timers: dict[str, asyncio.Task] = {}
+# table_id -> asyncio.Task (多局模式自动开下局计时器 #006)
+auto_start_timers: dict[str, asyncio.Task] = {}
 # table_id -> hand_id (已发送 hand_end 的 hand_id，避免重复发送)
 hand_end_sent: dict[str, str] = {}
 
@@ -220,6 +222,8 @@ async def lobby_create_table(sid, data):
     small_blind = data.get("small_blind")
     ante = data.get("ante")
     bots = data.get("bots", [])
+    game_mode = data.get("game_mode", "continuous")
+    max_hands = data.get("max_hands")
 
     try:
         table_id = lobby.create_table(
@@ -229,6 +233,8 @@ async def lobby_create_table(sid, data):
             initial_chips=initial_chips,
             small_blind=small_blind,
             ante=ante,
+            game_mode=game_mode,
+            max_hands=max_hands,
         )
     except (ValueError, NotImplementedError) as e:
         await _emit_error(sid, "INVALID_ACTION", str(e), {"game_type": game_type})
@@ -346,6 +352,9 @@ async def table_start_hand(sid, data):
     engine = lobby.get_table(table_id)
     if not engine:
         return
+
+    # 用户手动开局：取消自动开下局定时器，避免重复开局（#006）
+    _cancel_auto_start_timer(table_id)
 
     if not engine.can_start():
         await _emit_error(sid, "FORBIDDEN", "人数不足", {"table_id": table_id})
@@ -525,6 +534,35 @@ async def _broadcast_table_state(table_id: str):
             hand_end_payload = engine.get_hand_end_payload()
             await sio.emit("table:hand_end", hand_end_payload, room=table_id)
             hand_end_sent[table_id] = current_hand_id
+
+            # 多局模式（#006）：next_hand_in > 0 时启动自动开下局定时器
+            if hand_end_payload.get("next_hand_in", 0) > 0:
+                _cancel_auto_start_timer(table_id)
+                auto_start_timers[table_id] = asyncio.create_task(
+                    _auto_start_next_hand(table_id, hand_end_payload["next_hand_in"])
+                )
+
+
+def _cancel_auto_start_timer(table_id: str):
+    """取消某桌的自动开下局计时器（如有）。"""
+    timer = auto_start_timers.pop(table_id, None)
+    if timer and not timer.done():
+        timer.cancel()
+
+
+async def _auto_start_next_hand(table_id: str, delay_ms: int):
+    """多局模式：delay_ms 后自动开下一局（人数足够且无进行中手牌时）。"""
+    try:
+        await asyncio.sleep(delay_ms / 1000.0)
+        engine = lobby.get_table(table_id)
+        if engine and engine.can_start() and not engine.hand_in_progress:
+            engine.start_hand()
+            await _broadcast_table_state(table_id)
+            await _run_bot_loop(table_id)
+    except asyncio.CancelledError:
+        pass
+    finally:
+        auto_start_timers.pop(table_id, None)
 
 
 async def _broadcast_lobby_update():
