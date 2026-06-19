@@ -175,6 +175,13 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
             await _broadcast_table_state(table_id)
             await _run_bot_loop(table_id)
 
+        # hand 未开局：从引擎移除该 player，否则 engine.players 残留同名 player，
+        # 玩家再以新 sid 加入时会出现两个同名 player（stale_sid bug 根因之一）。
+        # hand 进行中时不能移除（上面已 auto-fold，移除会破坏牌局），维持现状。
+        elif engine and not engine.hand_in_progress:
+            engine.remove_player(sid)
+            await _broadcast_table_state(table_id)
+
         # 清理 session：宽限期过后无论是否有进行中的手牌都要清，
         # 否则真人从"未开局/已结算"的桌断线会残留 orphan session，
         # 使该桌永远被判为"有真人"而无法被 cleanup 回收（死局残留根因）
@@ -267,6 +274,29 @@ async def lobby_join_table(sid, data):
         await sio.enter_room(sid, table_id)
         await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": None}, room=sid)
         await sio.emit("table:state", engine.public_state(), room=sid)
+        return
+
+    # 同名残留处理：玩家断线超时后再以新 sid 加入同桌时，engine.players 里可能
+    # 还留着旧 sid 的同名 player（disconnect 超时仅在 hand 进行中才动引擎）。
+    # 直接 add_player 会产生两个同名 player，导致 current_turn 指向失效旧 sid、
+    # 真实玩家收到 legal_actions=[]。这里改为迁移旧 player 到新 sid（沿用旧座位）。
+    stale_sid = next(
+        (osid for osid, p in engine.players.items()
+         if not getattr(p, "is_bot", False) and p.name == sess["name"]),
+        None,
+    )
+    if stale_sid is not None and stale_sid != sid:
+        player = engine.players.pop(stale_sid)
+        player.sid = sid
+        engine.players[sid] = player
+        if engine.current_turn == stale_sid:
+            engine.current_turn = sid
+        seat = player.seat
+        sess["table_id"] = table_id
+        await sio.enter_room(sid, table_id)
+        await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": seat}, room=sid)
+        await _broadcast_table_state(table_id)
+        await _broadcast_lobby_update()
         return
 
     # 自动选座
