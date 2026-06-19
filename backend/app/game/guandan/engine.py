@@ -123,8 +123,8 @@ class GuandanEngine:
             if not played_cards:
                 return False, "所选牌不在手牌中"
 
-            # 识别牌型
-            combo = identify_combo(played_cards, self.level_card)
+            # 识别牌型（combos 模块按 dict 格式工作）
+            combo = identify_combo([c.to_dict() for c in played_cards], self.level_card)
             if not combo:
                 # 回滚
                 player.hole.extend(played_cards)

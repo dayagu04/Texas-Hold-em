@@ -43,7 +43,7 @@ def _easy_strategy(strength: float, to_call: int, chips: int,
 
     if to_call == 0:
         if strength > 0.7 and random.random() < 0.6 and "raise" in legal_map:
-            amount = current_bet + 20 * random.randint(2, 4)
+            amount = 20 * random.randint(2, 4)
             return "raise", {"amount": amount}
         if "check" in legal_map:
             return "check", {}
