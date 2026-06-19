@@ -1,5 +1,4 @@
 """大厅：管理所有房间索引与生命周期。"""
-import uuid
 from typing import Literal
 
 from .game.engine import GameEngine
@@ -13,6 +12,7 @@ class Lobby:
 
     def __init__(self):
         self.tables: dict[str, GameEngine] = {}
+        self._next_seq = 1  # 房间号自增序列，格式化为 6 位（000001）
 
     def create_table(
         self,
@@ -27,7 +27,11 @@ class Lobby:
         max_hands: int | None = None,
     ) -> str:
         """创建房间，返回 table_id。"""
-        table_id = f"t_{uuid.uuid4().hex[:8]}"
+        # 简短自增房间号（000001、000002…），跳过偶发已占用号
+        while f"{self._next_seq:06d}" in self.tables:
+            self._next_seq += 1
+        table_id = f"{self._next_seq:06d}"
+        self._next_seq += 1
 
         if game_type == "texas":
             engine = TexasEngine(
