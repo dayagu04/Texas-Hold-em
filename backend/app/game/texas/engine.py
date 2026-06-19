@@ -205,7 +205,9 @@ class TexasEngine:
         }
 
     def is_hand_over(self) -> bool:
-        return not self.hand_in_progress
+        # 仅当一手牌真正打到摊牌结束才算结束；初始 WAITING 状态（房间刚建、
+        # 尚未开局）不能误判为结束，否则会触发空的 table:hand_end
+        return self.stage == Stage.SHOWDOWN and not self.hand_in_progress
 
     def get_hand_end_payload(self) -> dict:
         """返回 table:hand_end 事件的 payload。"""
@@ -335,9 +337,11 @@ class TexasEngine:
         from_seat = self.players[from_sid].seat
         ordered = sorted(self._contenders(), key=lambda p: p.seat)
         n = len(ordered)
-        idx = next(i for i, p in enumerate(ordered) if p.seat == from_seat)
-        for step in range(1, n + 1):
-            cand = ordered[(idx + step) % n]
+        # 从 from_seat 之后的第一个在局玩家开始扫描；刚弃牌的玩家可能
+        # 已不在 _contenders() 中，因此用"首个 seat > from_seat"定位而非精确匹配
+        start = next((i for i, p in enumerate(ordered) if p.seat > from_seat), 0)
+        for step in range(n):
+            cand = ordered[(start + step) % n]
             if not cand.all_in and (not cand.acted or cand.bet < self.current_bet):
                 self.current_turn = cand.sid
                 return

@@ -17,8 +17,13 @@ sessions: dict[str, dict] = {}
 name_to_sid: dict[str, str] = {}
 # sid -> asyncio.Task (离线计时器)
 disconnect_timers: dict[str, asyncio.Task] = {}
+# table_id -> asyncio.Task (回合超时计时器)
+turn_timers: dict[str, asyncio.Task] = {}
 # table_id -> hand_id (已发送 hand_end 的 hand_id，避免重复发送)
 hand_end_sent: dict[str, str] = {}
+
+# 回合超时秒数（真人玩家未操作自动 fold/pass）
+TURN_TIMEOUT = 30
 
 
 async def _emit_error(sid: str, code: str, message: str, context: dict = None):
@@ -404,6 +409,51 @@ async def table_chat(sid, data):
 
 
 # ---- 辅助函数 ----
+def _cancel_turn_timer(table_id: str):
+    """取消某桌的回合超时计时器（如有）。"""
+    timer = turn_timers.pop(table_id, None)
+    if timer and not timer.done():
+        timer.cancel()
+
+
+async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT):
+    """启动回合超时计时器：真人玩家 timeout 秒未操作则自动 fold/pass。"""
+    # 取消旧计时器（每次广播都会重置，避免叠加）
+    _cancel_turn_timer(table_id)
+
+    async def timeout_handler():
+        try:
+            await asyncio.sleep(timeout)
+        except asyncio.CancelledError:
+            return
+
+        engine = lobby.get_table(table_id)
+        # 已不是该玩家回合 / 手牌已结束 → 放弃
+        if not engine or not engine.hand_in_progress or engine.current_turn != sid:
+            return
+
+        # 选择最保守的合法动作：能 check/pass 就不弃牌，否则 fold
+        legal = [a["action"] for a in engine.private_state(sid).get("legal_actions", [])]
+        if "check" in legal:
+            action = "check"
+        elif "pass" in legal:
+            action = "pass"
+        else:
+            action = "fold"
+
+        print(f"⏱️  [timeout] {sid} auto-{action} after {timeout}s", flush=True)
+        ok, err = engine.handle_action(sid, action, {})
+        if not ok:
+            print(f"⏱️  [timeout] {sid} auto-{action} 失败: {err}", flush=True)
+            return
+
+        turn_timers.pop(table_id, None)
+        await _broadcast_table_state(table_id)
+        await _run_bot_loop(table_id)
+
+    turn_timers[table_id] = asyncio.create_task(timeout_handler())
+
+
 async def _broadcast_table_state(table_id: str):
     """广播桌面状态。"""
     engine = lobby.get_table(table_id)
@@ -418,6 +468,16 @@ async def _broadcast_table_state(table_id: str):
         if not p.get("is_bot"):
             private = engine.private_state(p["sid"])
             await sio.emit("table:private", private, room=p["sid"])
+
+    # 回合超时计时器：仅对真人当前行动者启动，bot 由 _run_bot_loop 驱动
+    if engine.hand_in_progress and engine.current_turn:
+        current = engine.players.get(engine.current_turn)
+        if current and not current.is_bot:
+            await _start_turn_timer(table_id, engine.current_turn)
+        else:
+            _cancel_turn_timer(table_id)
+    else:
+        _cancel_turn_timer(table_id)
 
     # 如果手牌刚结束且尚未发送 hand_end，emit table:hand_end
     if engine.is_hand_over() and hasattr(engine, 'get_hand_end_payload'):
