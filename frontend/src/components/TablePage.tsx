@@ -2,6 +2,7 @@
  * 牌桌页（docs/UI-DESIGN.md §7）。
  * 订阅 table:state / table:private，按 game_type 路由到对应 board，包裹在 TableShell。
  * M3 完整版：三种 board 联动 + TableShell 行动条。
+ * 挂 ReconnectBanner。
  */
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -11,6 +12,7 @@ import TableShell from "./TableShell";
 import TexasBoard from "./tables/TexasBoard";
 import BragBoard from "./tables/BragBoard";
 import GuandanBoard from "./tables/GuandanBoard";
+import ReconnectBanner from "./ReconnectBanner";
 import type { PrivateState, TableState } from "../types";
 
 export default function TablePage() {
@@ -32,6 +34,7 @@ export default function TablePage() {
   if (!state) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-felt">
+        <ReconnectBanner />
         <p className="text-text-lo">加载中…</p>
       </div>
     );
@@ -42,8 +45,10 @@ export default function TablePage() {
     state.players.find((p) => p.name === name)?.sid ?? "sid-me";
 
   return (
-    <TableShell
-      tableId={id}
+    <>
+      <ReconnectBanner />
+      <TableShell
+        tableId={id}
       handId={state.hand_id}
       currentTurn={state.current_turn}
       privateState={priv}
@@ -60,5 +65,6 @@ export default function TablePage() {
         <BragBoard state={state} privateState={priv} mySid={mySid} />
       )}
     </TableShell>
+    </>
   );
 }

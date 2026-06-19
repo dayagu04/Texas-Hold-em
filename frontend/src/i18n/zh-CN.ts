@@ -24,6 +24,7 @@ export const zhCN = {
 
   login: {
     title: "CARD HOUSE",
+    subtitle: "— 多人在线纸牌游戏 —",
     placeholder: "输入用户名",
     submit: "进入",
     submitting: "登录中…",

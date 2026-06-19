@@ -1,9 +1,9 @@
 /*
- * 游戏选择主页（替代直接进入大厅）。
+ * 游戏选择主页（公开页面，不需登录）。
  * 三个游戏卡片（德州扑克、掼蛋、炸金花），每个卡片展示：
  * - 游戏名称 + 玩法介绍（2-3 句，来自 GAME-RULES.md）
- * - 开始游戏按钮
- * 点击后打开 CreateTableModal 并预选对应玩法。
+ * - 开始游戏按钮（未登录弹登录框，已登录直接跳 /lobby）
+ * 右上角：未登录显示[登录]按钮，已登录显示头像+用户名+退出。
  * 视觉：赌场暗金主题 + framer-motion 淡入淡出动效。
  */
 import { useState } from "react";
@@ -11,7 +11,7 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../auth";
 import { zhCN } from "../i18n/zh-CN";
-import CreateTableModal from "./CreateTableModal";
+import LoginModal from "./LoginModal";
 import type { GameType } from "../types";
 import { MOTION } from "../theme/motion";
 
@@ -48,30 +48,28 @@ const GAMES: GameInfo[] = [
 ];
 
 export default function GameSelection() {
-  const { name, signOut } = useAuth();
+  const { name, isAuthed, signOut } = useAuth();
   const navigate = useNavigate();
-  const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  const handleGameSelect = (gameType: GameType) => {
-    setSelectedGame(gameType);
-    setShowCreateModal(true);
+  const handleStartGame = () => {
+    if (isAuthed) {
+      // 已登录，直接进大厅
+      navigate("/lobby");
+    } else {
+      // 未登录，弹登录框
+      setShowLoginModal(true);
+    }
   };
 
   const handleLogout = () => {
     signOut();
-    navigate("/login", { replace: true });
+    // 退出后留在主页（主页公开）
   };
 
-  const handleModalClose = () => {
-    setShowCreateModal(false);
-    setSelectedGame(null);
-  };
-
-  const handleCreated = (tableId: string) => {
-    setShowCreateModal(false);
-    setSelectedGame(null);
-    navigate(`/table/${tableId}`);
+  const handleLoginSuccess = () => {
+    // 登录成功后跳大厅
+    navigate("/lobby");
   };
 
   return (
@@ -86,21 +84,30 @@ export default function GameSelection() {
             {zhCN.brand}
           </h1>
           <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/lobby")}
-              className="rounded-card border border-rim px-4 py-2 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"
-            >
-              {zhCN.gameSelection.toLobby}
-            </button>
-            <div className="flex items-center gap-3 text-text-lo">
-              <span className="text-text-hi">{name}</span>
+            {isAuthed ? (
+              // 已登录：头像 + 用户名 + 退出
+              <div className="flex items-center gap-3">
+                {/* 头像（首字母圆形） */}
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
+                  {name?.[0]?.toUpperCase() ?? "?"}
+                </div>
+                <span className="text-text-hi">{name}</span>
+                <button
+                  onClick={handleLogout}
+                  className="rounded-card border border-rim px-3 py-1 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+                >
+                  {zhCN.common.logout}
+                </button>
+              </div>
+            ) : (
+              // 未登录：登录按钮
               <button
-                onClick={handleLogout}
-                className="rounded-card border border-rim px-3 py-1 text-sm transition hover:border-gold/50"
+                onClick={() => setShowLoginModal(true)}
+                className="rounded-card bg-gold px-6 py-2 font-bold text-base transition hover:bg-gold-soft hover:shadow-lg"
               >
-                {zhCN.common.logout}
+                {zhCN.login.title}
               </button>
-            </div>
+            )}
           </div>
         </div>
       </header>
@@ -166,7 +173,7 @@ export default function GameSelection() {
 
               {/* 开始游戏按钮 */}
               <button
-                onClick={() => handleGameSelect(game.type)}
+                onClick={handleStartGame}
                 className="w-full rounded-card bg-gold py-3 font-bold text-base transition hover:bg-gold-soft hover:shadow-lg"
               >
                 {zhCN.gameSelection.startGame}
@@ -197,12 +204,11 @@ export default function GameSelection() {
         </motion.div>
       </main>
 
-      {/* 创建房间弹窗（预选玩法） */}
-      {showCreateModal && selectedGame && (
-        <CreateTableModal
-          onClose={handleModalClose}
-          onCreated={handleCreated}
-          preselectedGame={selectedGame}
+      {/* 登录弹窗 */}
+      {showLoginModal && (
+        <LoginModal
+          onClose={() => setShowLoginModal(false)}
+          onSuccess={handleLoginSuccess}
         />
       )}
     </div>

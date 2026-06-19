@@ -4,13 +4,16 @@
  * 玩法 tag 配色（德扑深红 / 掼蛋深蓝 / 炸金花暗紫），右上 🤖 标识。
  * 状态徽标：等待灰色虚线 / 进行中金色实心。
  * 右下 + 新建 按钮触发 CreateTableModal（M2 后半）。
+ * 进入时 connectSocket，挂 ReconnectBanner。
  */
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth";
+import { connectSocket } from "../socket";
 import { zhCN } from "../i18n/zh-CN";
 import CreateTableModal from "./CreateTableModal";
+import ReconnectBanner from "./ReconnectBanner";
 import type { GameType, LobbyTable, TableStatus } from "../types";
 
 const TAG_BG: Record<GameType, string> = {
@@ -29,6 +32,11 @@ export default function Lobby() {
     new Set(["waiting", "playing"]),
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // 进入大厅时建立 socket 连接（幂等）
+  useEffect(() => {
+    connectSocket();
+  }, []);
 
   useEffect(() => {
     const off = subscribe("lobby:update", (data) => setTables(data.tables));
@@ -61,6 +69,8 @@ export default function Lobby() {
 
   return (
     <div className="min-h-screen bg-vignette">
+      {/* ReconnectBanner（仅在需要 socket 的页面挂载） */}
+      <ReconnectBanner />
       {/* 顶部栏 */}
       <header className="border-b border-rim/50 bg-base/80 px-6 py-4 backdrop-blur-sm">
         <div className="mx-auto flex max-w-7xl items-center justify-between">

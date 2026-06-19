@@ -4,7 +4,6 @@ import Login from "./components/Login";
 import GameSelection from "./components/GameSelection";
 import Lobby from "./components/Lobby";
 import TablePage from "./components/TablePage";
-import ReconnectBanner from "./components/ReconnectBanner";
 import type { ReactNode } from "react";
 
 /** 路由守卫：未登录访问受保护路径自动跳 /login。 */
@@ -16,17 +15,10 @@ function RequireAuth({ children }: { children: ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <ReconnectBanner />
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <RequireAuth>
-              <GameSelection />
-            </RequireAuth>
-          }
-        />
+        {/* 主页公开，不需登录 */}
+        <Route path="/" element={<GameSelection />} />
         <Route
           path="/lobby"
           element={
