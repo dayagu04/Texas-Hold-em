@@ -9,13 +9,14 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
+    port: 5166,
     proxy: {
       '/socket.io': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:7999',
         ws: true,
       },
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:7999',
       }
     }
   }
