@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import CardSprite from "./CardSprite";
-import type { HandResult, PublicPlayer } from "../types";
+import type { HandResult, PublicPlayer, TexasHandResult, BragHandResult } from "../types";
 
 interface Props {
   results: HandResult[];
@@ -17,6 +17,11 @@ interface Props {
   onLeave: () => void;
 }
 
+// 类型守卫：德扑/炸金花有 sid/name/amount/cards/hand，掼蛋按队结算无这些字段
+function isPlayerResult(r: HandResult): r is TexasHandResult | BragHandResult {
+  return "sid" in r && "name" in r && "amount" in r;
+}
+
 export default function HandEndModal({
   results,
   players,
@@ -24,8 +29,10 @@ export default function HandEndModal({
   onClose,
   onLeave,
 }: Props) {
-  // 赢家在上：按盈亏降序。
-  const ranked = [...results].sort((a, b) => b.amount - a.amount);
+  // 赢家在上：按盈亏降序。掼蛋结算不适用(按队),暂只排序玩家结算。
+  const playerResults = results.filter(isPlayerResult);
+  const ranked = [...playerResults].sort((a, b) => b.amount - a.amount);
+
   // 弃牌玩家：在 players 里但不在 results 里。
   const resultSids = new Set(ranked.map((r) => r.sid));
   const foldedPlayers = players.filter((p) => !resultSids.has(p.sid));
