@@ -27,9 +27,16 @@ let connected = false;
 
 /** 用当前存储的 token 建立连接（幂等）。无 token 时不连。 */
 export function connectSocket(): void {
-  if (connected) return;
+  if (connected) {
+    console.log("[socket] connectSocket: already connected, skipping");
+    return;
+  }
   const token = getToken();
-  if (!token && !MOCK) return;
+  if (!token && !MOCK) {
+    console.warn("[socket] connectSocket: no token, skipping connection");
+    return;
+  }
+  console.log("[socket] connectSocket: initiating connection, MOCK:", MOCK);
   transport.connect(token ?? "mock");
   connected = true;
 }

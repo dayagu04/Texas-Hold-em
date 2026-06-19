@@ -28,17 +28,40 @@ export class SocketIoTransport implements Transport {
   connect(token: string): void {
     if (this.socket) return;
     this.setStatus("connecting");
+    console.log("[socket] connecting with token:", token.slice(0, 20) + "...");
     // API_BASE 为空时走同源 / vite proxy
+    // transports 默认 ["polling", "websocket"]，自动升级
     const socket: TypedSocket = io(API_BASE || undefined, {
-      transports: ["websocket"],
       auth: { token },
     });
-    socket.on("connect", () => this.setStatus("connected"));
-    socket.on("disconnect", () => this.setStatus("disconnected"));
-    socket.io.on("reconnect_attempt", () => this.setStatus("reconnecting"));
-    socket.io.on("reconnect", () => this.setStatus("connected"));
-    // 重连成功后立即拉一次大厅（API-CONTRACT §4）
-    socket.on("connect", () => socket.emit("lobby:list", {}));
+
+    socket.on("connect", () => {
+      console.log("[socket] connected, socket.id:", socket.id);
+      this.setStatus("connected");
+      // 重连成功后立即拉一次大厅（API-CONTRACT §4）
+      socket.emit("lobby:list", {});
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log("[socket] disconnected, reason:", reason);
+      this.setStatus("disconnected");
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("[socket] connect_error:", err.message, err);
+      this.setStatus("disconnected");
+    });
+
+    socket.io.on("reconnect_attempt", (attempt) => {
+      console.log("[socket] reconnect_attempt #", attempt);
+      this.setStatus("reconnecting");
+    });
+
+    socket.io.on("reconnect", (attempt) => {
+      console.log("[socket] reconnected after", attempt, "attempts");
+      this.setStatus("connected");
+    });
+
     this.socket = socket;
   }
 
