@@ -254,7 +254,8 @@ async def lobby_create_table(sid, data):
         bot_name = f"Bot-{bot_level[:1].upper()}{bot_seat}"
         engine.add_player(bot_sid, bot_name, bot_seat, is_bot=True, bot_level=bot_level)
 
-    print(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, room list={list(sio.manager.rooms.get(sid, set()))}")
+    _sid_rooms = [r for r, members in sio.manager.rooms.get('/', {}).items() if sid in members]
+    print(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in sessions}")
     await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": 0}, room=sid)
     print(f"[DEBUG] AFTER emit lobby:joined")
     await _broadcast_table_state(table_id)
