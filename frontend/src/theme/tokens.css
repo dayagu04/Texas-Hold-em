@@ -45,21 +45,34 @@
   --radius-card: 8px; /* rounded-card：牌 / 小卡 */
   --radius-panel: 16px; /* rounded-panel：面板 / 弹窗 */
 
-  /* ---- 阴影 ---- */
-  --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(201, 161, 74, 0.15) inset;
-  --shadow-elev: 0 12px 40px rgba(0, 0, 0, 0.55);
+  /* ---- 阴影 ----
+     真实感关键：用多层、渐弱、扩散的柔影叠加，而非单层硬阴影。
+     每个复合阴影都从贴边的细接触影 → 中距柔影 → 远距大扩散影过渡。 */
+  --shadow-card:
+    0 1px 2px rgba(0, 0, 0, 0.5),
+    0 3px 8px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(201, 161, 74, 0.15) inset;
+  --shadow-elev:
+    0 2px 6px rgba(0, 0, 0, 0.4),
+    0 8px 24px rgba(0, 0, 0, 0.45),
+    0 18px 48px rgba(0, 0, 0, 0.4);
   /* 牌面浮起投影（让牌"浮"在毡布上更立体，Task B）。
-     叠加：贴边接触阴影 + 中距柔影 + 远距大投影，营造厚度感。 */
+     叠加：贴边接触阴影 + 近距柔影 + 中距柔影 + 远距大投影，层次更细、边缘更柔。 */
   --shadow-float:
-    0 1px 1px rgba(0, 0, 0, 0.55),
-    0 4px 8px rgba(0, 0, 0, 0.4),
-    0 10px 22px rgba(0, 0, 0, 0.45);
-  /* 筹码堆叠投影（贴桌接触影 + 短柔影） */
-  --shadow-chip: 0 1px 1px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.4);
-  /* 座位卡悬浮投影（更深、更柔和，明显浮在桌面上） */
+    0 1px 1px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 6px 12px rgba(0, 0, 0, 0.32),
+    0 12px 26px rgba(0, 0, 0, 0.38);
+  /* 筹码堆叠投影（贴桌接触影 + 近柔影 + 中距扩散影，更接近真实落桌的柔和分层） */
+  --shadow-chip:
+    0 1px 1px rgba(0, 0, 0, 0.4),
+    0 2px 4px rgba(0, 0, 0, 0.32),
+    0 5px 10px rgba(0, 0, 0, 0.3);
+  /* 座位卡悬浮投影（更深、更柔和，明显浮在桌面上；多层渐弱让边缘更自然） */
   --shadow-seat:
-    0 3px 8px rgba(0, 0, 0, 0.7),
-    0 8px 20px rgba(0, 0, 0, 0.5),
+    0 2px 4px rgba(0, 0, 0, 0.5),
+    0 5px 12px rgba(0, 0, 0, 0.5),
+    0 12px 28px rgba(0, 0, 0, 0.42),
     0 0 0 1px rgba(201, 161, 74, 0.2) inset;
   /* 庄家按钮外光晕（金色发光徽章） */
   --shadow-dealer:
@@ -115,6 +128,47 @@
   --table-spotlight: radial-gradient(ellipse 55% 45% at 50% 48%, rgba(255, 255, 255, 0.06) 0%, transparent 60%);
 
   --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+
+  /* ---- 氛围 / 材质复合令牌（供未来组件复用，不绑定具体组件） ----
+     这些是可复用的复合渐变，统一桌面光影语言：环境光晕、桌面反光、玻璃/亚克力质感。 */
+
+  /* 环境光晕：暖金调的大范围柔光，模拟头顶吊灯洒在牌桌中心区的氛围光。
+     用于焦点区背衬 / 底池高光层（叠在毡布之上的可选层）。 */
+  --ambient-glow: radial-gradient(
+    ellipse 60% 50% at 50% 38%,
+    rgba(231, 200, 122, 0.10) 0%,
+    rgba(201, 161, 74, 0.05) 38%,
+    transparent 68%
+  );
+
+  /* 桌面反光：自上而下的细长高光带，模拟光滑桌面/毡布压光对环境光的镜面反射。 */
+  --surface-sheen: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.10) 0%,
+    rgba(255, 255, 255, 0.03) 18%,
+    transparent 42%,
+    transparent 100%
+  );
+
+  /* 玻璃 / 亚克力质感：半透明白渐变 + 顶部细高光线，给浮层/徽章一点通透质感。
+     搭配 backdrop-filter: blur() 使用效果最佳。 */
+  --glass-sheen: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.05) 30%,
+    rgba(255, 255, 255, 0.02) 60%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+
+  /* 金属高光扫光：斜向的窄亮带，用于金色徽章/筹码顶面的拉丝/反光高光。 */
+  --metal-sheen: linear-gradient(
+    115deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.0) 30%,
+    rgba(255, 255, 255, 0.45) 48%,
+    rgba(255, 255, 255, 0.0) 66%,
+    transparent 100%
+  );
 
   /* 座位卡渐变底：微妙暗部渐变（顶部略亮、底部略暗，模拟受光）+ 半透明毛玻璃效果 */
   --seat-card-bg: linear-gradient(
@@ -208,6 +262,21 @@
 /* 庄家按钮金色渐变底：bg-dealer-gold */
 @utility bg-dealer-gold {
   background: var(--dealer-bg);
+}
+
+/* 环境光晕叠层：bg-ambient-glow（焦点区暖金柔光，绝对定位覆盖层用） */
+@utility bg-ambient-glow {
+  background: var(--ambient-glow);
+}
+
+/* 桌面反光叠层：bg-surface-sheen（光滑桌面镜面高光带） */
+@utility bg-surface-sheen {
+  background: var(--surface-sheen);
+}
+
+/* 玻璃质感叠层：bg-glass-sheen（搭配 backdrop-blur 使用） */
+@utility bg-glass-sheen {
+  background: var(--glass-sheen);
 }
 
 /* ---- Keyframes（docs/UI-DESIGN.md §8 动效清单） ---- */

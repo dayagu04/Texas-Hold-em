@@ -7,6 +7,7 @@
 - 仅剩 2 人时禁止 raise
 - 连续 N 圈无加注强制摊牌（N=3）
 """
+from ...profiles import load_profile
 from enum import Enum
 
 from ..cards import Deck
@@ -208,6 +209,7 @@ class BragEngine:
                 "chips": p.chips,
                 "status": self._player_status(p),
                 "ready": p.ready,
+                "avatar": load_profile(p.name).get("avatar"),
             }
 
         active_sids = [p.sid for p in self._active_players()]

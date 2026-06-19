@@ -90,7 +90,7 @@ export default function GuandanBoard({ state, privateState, mySid }: Props) {
 
         return (
           <div key={p.sid} className="absolute" style={coords as React.CSSProperties}>
-            <SeatCard player={p} isCurrentTurn={isCurrentTurn} isMe={isMe} />
+            <SeatCard player={p} isCurrentTurn={isCurrentTurn} isMe={isMe} deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined} />
             <div className="mt-1 text-center text-xs text-text-lo">
               {pos} · 剩 {count} 张
             </div>

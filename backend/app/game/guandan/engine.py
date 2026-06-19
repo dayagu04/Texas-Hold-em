@@ -8,6 +8,7 @@
 - 先出完者名次为 1，依次 2/3/4
 - 结算：双上 +3，一三 +2，一四 +1
 """
+from ...profiles import load_profile
 from enum import Enum
 from collections import defaultdict
 
@@ -183,6 +184,7 @@ class GuandanEngine:
                 "bot_level": p.bot_level,
                 "status": "won" if p.rank else "active",
                 "ready": p.ready,
+                "avatar": load_profile(p.name).get("avatar"),
             }
 
         team_a = [p.sid for p in self.players.values() if p.seat in [0, 2]]

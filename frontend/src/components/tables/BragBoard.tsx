@@ -122,7 +122,7 @@ export default function BragBoard({ state, privateState, mySid }: Props) {
               className="absolute"
               style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }}
             >
-              <SeatCard player={p} isCurrentTurn={isCurrentTurn} isMe={isMe} />
+              <SeatCard player={p} isCurrentTurn={isCurrentTurn} isMe={isMe} deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined} />
               {/* 牌片（3 张） + 看牌覆盖层 */}
               <div className="relative mt-2">
                 <div className="flex justify-center gap-1">

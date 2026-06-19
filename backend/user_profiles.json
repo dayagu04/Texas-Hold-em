@@ -1,3 +1,5 @@
 {
-  "_comment": "用户资料存储,avatar 为头像 URL 或 null"
+  "大牙": {
+    "avatar": "/static/avatars/大牙.jpg"
+  }
 }

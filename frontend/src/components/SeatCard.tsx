@@ -4,6 +4,7 @@
  * M3 骨架版：纯文本 + 状态样式；M4 精修头像渐变 / Bot 思考闪烁动画。
  * M4.5 精修：悬浮质感卡片 + 渐变底 + 毛玻璃 + 双层描边 + 立体投影 + 头像放大光晕 + 轮到你金色脉冲动画。
  */
+import { useEffect, useState } from "react";
 import { zhCN } from "../i18n/zh-CN";
 import ChipStack from "./ChipStack";
 import type { PublicPlayer } from "../types";
@@ -13,6 +14,7 @@ interface Props {
   currentBet?: number; // 本街已下注（非总筹码）
   isCurrentTurn?: boolean;
   isMe?: boolean;
+  deadline?: number; // Unix timestamp ms，轮到你时的行动截止时间
   className?: string;
 }
 
@@ -21,11 +23,30 @@ export default function SeatCard({
   currentBet,
   isCurrentTurn,
   isMe,
+  deadline,
   className = "",
 }: Props) {
   const initials = player.name.slice(0, 2).toUpperCase();
   const statusLabel = player.status !== "active" ? zhCN.playerStatus[player.status] : "";
   const isWinner = player.status === "won";
+
+  // 计时环：计算剩余时间百分比
+  const [timeLeft, setTimeLeft] = useState(100); // 0-100%
+  useEffect(() => {
+    if (!isCurrentTurn || !deadline) {
+      setTimeLeft(100);
+      return;
+    }
+    const updateTimer = () => {
+      const now = Date.now();
+      const total = 30000; // 30s 总时长（与后端 TURN_TIMEOUT 对齐）
+      const remaining = Math.max(0, deadline - now);
+      setTimeLeft((remaining / total) * 100);
+    };
+    updateTimer();
+    const interval = setInterval(updateTimer, 100); // 每 100ms 更新一次
+    return () => clearInterval(interval);
+  }, [isCurrentTurn, deadline]);
 
   return (
     <div
@@ -37,16 +58,46 @@ export default function SeatCard({
             : "border border-rim/80 bg-seat-card shadow-seat"
       } p-3.5 transition-all duration-base ${isWinner ? "animate-[winnerGlow_1200ms_ease-in-out]" : ""} ${className}`}
     >
-      {/* 头像（首字母圆形） */}
+      {/* 头像（首字母圆形 / 真实头像） */}
       <div className="mb-2.5 flex items-center gap-2.5">
-        <div
-          className={`flex h-12 w-12 items-center justify-center rounded-full ${
-            isMe
-              ? "border-2 border-gold/70 bg-gold text-base shadow-[0_0_18px_rgba(201,161,74,0.6)]"
-              : "border-2 border-rim/60 bg-gradient-to-br from-rim/80 to-base/90 text-text-lo shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
-          } text-sm font-bold`}
-        >
-          {initials}
+        <div className="relative">
+          {/* 计时环：仅 isCurrentTurn 时渲染 */}
+          {isCurrentTurn && deadline && (
+            <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 56 56">
+              {/* 底层灰色环(背景) */}
+              <circle cx="28" cy="28" r="26" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="3" />
+              {/* 进度环(金色,根据 timeLeft 控制 stroke-dashoffset) */}
+              <circle
+                cx="28" cy="28" r="26" fill="none"
+                stroke="var(--color-gold-soft)" strokeWidth="3" strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 26}`}
+                strokeDashoffset={`${2 * Math.PI * 26 * (1 - timeLeft / 100)}`}
+                className="transition-all duration-100 ease-linear"
+              />
+            </svg>
+          )}
+          {/* 头像 */}
+          {player.avatar ? (
+            <img
+              src={player.avatar}
+              alt={player.name}
+              className={`h-12 w-12 rounded-full object-cover ${
+                isMe
+                  ? "border-2 border-gold/70 shadow-[0_0_18px_rgba(201,161,74,0.6)]"
+                  : "border-2 border-rim/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+              }`}
+            />
+          ) : (
+            <div
+              className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                isMe
+                  ? "border-2 border-gold/70 bg-gold text-base shadow-[0_0_18px_rgba(201,161,74,0.6)]"
+                  : "border-2 border-rim/60 bg-gradient-to-br from-rim/80 to-base/90 text-text-lo shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
+              } text-sm font-bold`}
+            >
+              {initials}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="truncate text-base font-semibold text-text-hi drop-shadow-sm">
@@ -67,16 +118,6 @@ export default function SeatCard({
           {player.chips.toLocaleString("en-US")}
         </span>
       </div>
-
-      {/* 当前下注显示在卡片内（小字，如果 > 0） */}
-      {currentBet !== undefined && currentBet > 0 && (
-        <div className="mb-1 text-xs text-gold/70">
-          下注：
-          <span className="ml-0.5 font-semibold text-gold" style={{ fontFamily: "var(--font-mono)" }}>
-            {currentBet.toLocaleString("en-US")}
-          </span>
-        </div>
-      )}
 
       {/* 当前下注筹码堆（桌面筹码，保留在卡片外侧） */}
       {currentBet !== undefined && currentBet > 0 && (

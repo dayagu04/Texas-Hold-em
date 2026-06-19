@@ -155,6 +155,7 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
                 currentBet={bet}
                 isCurrentTurn={isCurrentTurn}
                 isMe={isMe}
+                deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined}
               />
               {/* 底牌（自己 / 摊牌）— M4 发牌动画：hand_id 变化触发错峰飞入 */}
               {hole.length > 0 && (

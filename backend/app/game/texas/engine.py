@@ -2,6 +2,7 @@
 
 从原 table.py 重构而来，保留所有现有功能。
 """
+from ...profiles import load_profile
 from enum import Enum
 
 from ..cards import Deck
@@ -183,6 +184,7 @@ class TexasEngine:
                 "chips": p.chips,
                 "status": self._player_status(p),
                 "ready": p.ready,
+                "avatar": load_profile(p.name).get("avatar"),
             }
 
         return {

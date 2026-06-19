@@ -50,6 +50,7 @@ export interface PublicPlayer {
   chips: number;
   status: PlayerStatus;
   ready?: boolean; // 准备机制：waiting 阶段是否已准备（bot 恒 true）
+  avatar?: string | null; // 头像 URL，如 "/static/avatars/大牙.png" 或 null
 }
 
 /* ---- 行动日志（API-CONTRACT §2.4 ActionLog）---- */
