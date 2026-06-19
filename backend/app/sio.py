@@ -35,18 +35,27 @@ async def _emit_error(sid: str, code: str, message: str, context: dict = None):
 
 
 @sio.event
-async def connect(sid, environ):
-    """连接握手：验证 token，处理同名顶替。"""
-    auth = environ.get("HTTP_SEC_WEBSOCKET_PROTOCOL") or ""
-    # Socket.IO 客户端会在 auth 对象里传 token
-    # 从 query string 或 auth header 读取
-    query = environ.get("QUERY_STRING", "")
-    token = None
-    if "token=" in query:
-        token = query.split("token=")[1].split("&")[0]
+async def connect(sid, environ, auth=None):
+    """连接握手：验证 token，处理同名顶替。
 
+    token 读取优先级（前端 socket.io 走第一种）：
+    1. socket.io auth 负载 auth={"token": ...}
+    2. query string ?token=...
+    3. HTTP Authorization: Bearer ...
+    """
+    token = None
+    # 1) socket.io 客户端的 auth 负载（python-socketio 放在第三个参数）
+    if isinstance(auth, dict):
+        token = auth.get("token")
+
+    # 2) query string fallback
     if not token:
-        # 尝试从 HTTP headers 读 (Socket.IO 握手时可能在此)
+        query = environ.get("QUERY_STRING", "")
+        if "token=" in query:
+            token = query.split("token=")[1].split("&")[0]
+
+    # 3) HTTP Authorization header fallback
+    if not token:
         auth_header = environ.get("HTTP_AUTHORIZATION", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]

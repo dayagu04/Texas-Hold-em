@@ -225,7 +225,9 @@ class BragEngine:
         }
 
     def is_hand_over(self) -> bool:
-        return not self.hand_in_progress
+        # 仅当一手牌真正摊牌结束才算结束；建桌/开局前的 WAITING 状态
+        # 不能误判为结束，否则会触发空的 table:hand_end（见 M5 E2E BUG-2）
+        return self.stage == Stage.SHOWDOWN and not self.hand_in_progress
 
     def get_hand_end_payload(self) -> dict:
         """返回 table:hand_end 事件的 payload。"""
