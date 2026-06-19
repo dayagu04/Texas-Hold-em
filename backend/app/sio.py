@@ -8,6 +8,7 @@ import random
 
 from .auth import verify_token
 from .lobby import lobby
+from .logger import log
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
@@ -62,6 +63,8 @@ async def connect(sid, environ, auth=None):
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
 
+    log(f"[connect] sid={sid}, has_token={bool(token)}")
+
     if not token:
         await sio.emit("connect_error", {"message": "AUTH_REQUIRED"}, room=sid)
         raise ConnectionRefusedError("AUTH_REQUIRED")
@@ -72,6 +75,7 @@ async def connect(sid, environ, auth=None):
         raise ConnectionRefusedError("INVALID_TOKEN")
 
     name = payload["name"]
+    log(f"[connect] verified, name={name}, name_to_sid_existing={name in name_to_sid}")
 
     # 同名顶替
     if name in name_to_sid:
@@ -108,7 +112,7 @@ async def connect(sid, environ, auth=None):
                 await sio.emit("table:state", engine.public_state(), room=sid)
                 await sio.emit("table:private", engine.private_state(sid), room=sid)
 
-            print(f"[reconnect] {old_sid} -> {sid} ({name})")
+            log(f"[connect] RECONNECT: old_sid={old_sid} -> new_sid={sid}, table={table_id}, name={name}")
             return
 
         # 非重连场景：同名顶替
@@ -118,13 +122,13 @@ async def connect(sid, environ, auth=None):
 
     name_to_sid[name] = sid
     sessions[sid] = {"name": name, "table_id": None}
-    print(f"[connect] {sid} ({name})")
+    log(f"[connect] NEW SESSION: sid={sid}, name={name}")
 
 
 @sio.event
 async def disconnect(sid):
     """断线处理：保留座位 30s，超时自动 fold/pass。"""
-    print(f"[disconnect] {sid}")
+    log(f"[disconnect] {sid}")
     sess = sessions.get(sid)
     if not sess:
         return
@@ -192,10 +196,10 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
         if name in name_to_sid and name_to_sid[name] == sid:
             del name_to_sid[name]
 
-        print(f"[timeout] {sid} session cleaned after disconnect")
+        log(f"[timeout] {sid} session cleaned after disconnect")
 
     except asyncio.CancelledError:
-        print(f"[timeout] {sid} reconnected, timer cancelled")
+        log(f"[timeout] {sid} reconnected, timer cancelled")
         pass
 
 
@@ -212,7 +216,7 @@ async def lobby_list(sid, data):
 async def lobby_create_table(sid, data):
     """创建房间并自动入座 0 号位。"""
     sess = sessions.get(sid)
-    print(f"[DEBUG create_table] sid={sid}, name={sess.get('name') if sess else None}, data={data}")
+    log(f"[create_table] ENTRY: sid={sid}, name={sess.get('name') if sess else None}, has_session={sess is not None}, data={data}")
     if not sess:
         return
 
@@ -256,12 +260,12 @@ async def lobby_create_table(sid, data):
         try:
             engine.add_player(bot_sid, bot_name, bot_seat, is_bot=True, bot_level=bot_level)
         except (ValueError, NotImplementedError) as e:
-            print(f"[WARN create_table] skip bot seat={bot_seat}: {e}")
+            log(f"[WARN create_table] skip bot seat={bot_seat}: {e}")
 
     _sid_rooms = [r for r, members in sio.manager.rooms.get('/', {}).items() if sid in members]
-    print(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in sessions}")
+    log(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in sessions}")
     await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": 0}, room=sid)
-    print(f"[DEBUG] AFTER emit lobby:joined")
+    log(f"[DEBUG] AFTER emit lobby:joined")
     await _broadcast_table_state(table_id)
     await _broadcast_lobby_update()
 
@@ -272,6 +276,8 @@ async def lobby_join_table(sid, data):
     sess = sessions.get(sid)
     if not sess:
         return
+
+    log(f"[join_table] ENTRY: sid={sid}, table_id={data.get('table_id')}, has_session={sess is not None}")
 
     table_id = data.get("table_id")
     seat = data.get("seat")
@@ -308,6 +314,7 @@ async def lobby_join_table(sid, data):
         seat = player.seat
         sess["table_id"] = table_id
         await sio.enter_room(sid, table_id)
+        log(f"[join_table] STALE FOUND: old_sid={stale_sid}, new_sid={sid}, name={sess['name']}, seat={seat}")
         await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": seat}, room=sid)
         await _broadcast_table_state(table_id)
         await _broadcast_lobby_update()
@@ -325,6 +332,7 @@ async def lobby_join_table(sid, data):
     engine.add_player(sid, sess["name"], seat)
     sess["table_id"] = table_id
     await sio.enter_room(sid, table_id)
+    log(f"[join_table] NEW SEAT: sid={sid}, seat={seat}")
     await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": seat}, room=sid)
     await _broadcast_table_state(table_id)
     await _broadcast_lobby_update()
@@ -497,10 +505,10 @@ async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT
         else:
             action = "fold"
 
-        print(f"⏱️  [timeout] {sid} auto-{action} after {timeout}s", flush=True)
+        log(f"⏱️  [timeout] {sid} auto-{action} after {timeout}s")
         ok, err = engine.handle_action(sid, action, {})
         if not ok:
-            print(f"⏱️  [timeout] {sid} auto-{action} 失败: {err}", flush=True)
+            log(f"⏱️  [timeout] {sid} auto-{action} 失败: {err}")
             return
 
         turn_timers.pop(table_id, None)
@@ -517,12 +525,14 @@ async def _broadcast_table_state(table_id: str):
         return
 
     public = engine.public_state()
+    log(f"[broadcast] table={table_id}, current_turn={engine.current_turn}, stage={public.get('stage')}")
     await sio.emit("table:state", public, room=table_id)
 
     # 给每个真人玩家发私有状态
     for p in public["players"]:
         if not p.get("is_bot"):
             private = engine.private_state(p["sid"])
+            log(f"[broadcast] -> private to sid={p['sid']}, name={p['name']}")
             await sio.emit("table:private", private, room=p["sid"])
 
     # 回合超时计时器：仅对真人当前行动者启动，bot 由 _run_bot_loop 驱动
@@ -596,7 +606,7 @@ async def _run_bot_loop(table_id: str):
         bot_sid, action, payload = bot_action
         ok, err = engine.handle_action(bot_sid, action, payload)
         if not ok:
-            print(f"[bot_error] {bot_sid} {action}: {err}")
+            log(f"[bot_error] {bot_sid} {action}: {err}")
             break
 
         await _broadcast_table_state(table_id)

@@ -7,6 +7,7 @@ import socketio
 import os
 from pathlib import Path
 
+from .logger import log
 from .sio import sio, sessions, _broadcast_lobby_update
 from .auth import is_allowed, create_token, verify_token
 from .lobby import lobby
@@ -87,6 +88,16 @@ async def cleanup_lobby(authorization: str = Header(None)):
         await _broadcast_lobby_update()
 
     return {"removed_count": len(removed), "removed": removed}
+
+
+class FrontendLog(BaseModel):
+    message: str
+
+
+@app.post("/api/debug/log")
+async def collect_frontend_log(data: FrontendLog):
+    log(f"[FRONTEND] {data.message}")
+    return {"status": "ok"}
 
 
 # ---- 前端静态资源挂载 ----
