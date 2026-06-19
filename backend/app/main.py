@@ -7,7 +7,7 @@ import socketio
 import os
 from pathlib import Path
 
-from .sio import sio
+from .sio import sio, sessions, _broadcast_lobby_update
 from .auth import is_allowed, create_token, verify_token
 from .lobby import lobby
 
@@ -60,6 +60,33 @@ def me(authorization: str = Header(None)):
 def get_lobby(authorization: str = Header(None)):
     # v1: 大厅不强制验证 token
     return {"tables": lobby.list_tables()}
+
+
+@app.post("/api/lobby/cleanup")
+async def cleanup_lobby(authorization: str = Header(None)):
+    """清理无真人在座的房间（死局回收）。需要 token 鉴权。
+
+    安全红线：只删 players 里没有任何活跃真人（非 bot 且 sid 在 sessions 中）
+    的房间，正在玩的真人局绝不误删。清理后广播 lobby:update 刷新前端。
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail={
+            "error": {"code": "AUTH_REQUIRED", "message": "缺少 token"}
+        })
+    token = authorization[7:]
+    if not verify_token(token):
+        raise HTTPException(status_code=401, detail={
+            "error": {"code": "INVALID_TOKEN", "message": "token 无效或已过期"}
+        })
+
+    active_sids = set(sessions.keys())
+    removed = lobby.cleanup_empty(active_sids)
+
+    # 清理后广播大厅更新，让前端刷新列表
+    if removed:
+        await _broadcast_lobby_update()
+
+    return {"removed_count": len(removed), "removed": removed}
 
 
 # ---- 前端静态资源挂载 ----

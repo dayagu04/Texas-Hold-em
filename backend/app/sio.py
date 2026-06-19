@@ -151,11 +151,9 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
             return
 
         engine = lobby.get_table(table_id)
-        if not engine or not engine.hand_in_progress:
-            return
 
-        # 检查是否轮到该玩家
-        if engine.current_turn == sid:
+        # 仅当有进行中的手牌且轮到该玩家时，才自动执行保守动作（fold/pass）
+        if engine and engine.hand_in_progress and engine.current_turn == sid:
             # 自动执行最保守操作
             if engine.game_type == "texas":
                 # 德扑：check 优先，否则 fold
@@ -177,13 +175,15 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
             await _broadcast_table_state(table_id)
             await _run_bot_loop(table_id)
 
-        # 清理 session
+        # 清理 session：宽限期过后无论是否有进行中的手牌都要清，
+        # 否则真人从"未开局/已结算"的桌断线会残留 orphan session，
+        # 使该桌永远被判为"有真人"而无法被 cleanup 回收（死局残留根因）
         name = sess["name"]
         sessions.pop(sid, None)
         if name in name_to_sid and name_to_sid[name] == sid:
             del name_to_sid[name]
 
-        print(f"[timeout] {sid} auto-folded due to disconnect")
+        print(f"[timeout] {sid} session cleaned after disconnect")
 
     except asyncio.CancelledError:
         print(f"[timeout] {sid} reconnected, timer cancelled")

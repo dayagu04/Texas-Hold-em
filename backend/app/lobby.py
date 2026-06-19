@@ -60,6 +60,30 @@ class Lobby:
     def remove_table(self, table_id: str) -> None:
         self.tables.pop(table_id, None)
 
+    def cleanup_empty(self, active_sids: set[str]) -> list[str]:
+        """清理无真人在座的房间（死局回收）。
+
+        判定"无真人"：遍历房间 players，只要有任意一个 **非 bot** 玩家的 sid
+        仍在 `active_sids`（当前活跃 socket 会话）中，即视为有真人，**保留**。
+        否则（全 bot / 空桌 / 真人均已离线）删除。
+
+        参数:
+            active_sids: 当前活跃的真人 socket sid 集合（来自 sio.sessions）。
+        返回:
+            被清理掉的 table_id 列表。
+        """
+        removed: list[str] = []
+        for tid, engine in list(self.tables.items()):
+            players = getattr(engine, "players", {}) or {}
+            has_live_human = any(
+                (not getattr(p, "is_bot", False)) and p.sid in active_sids
+                for p in players.values()
+            )
+            if not has_live_human:
+                self.tables.pop(tid, None)
+                removed.append(tid)
+        return removed
+
     def list_tables(self) -> list[dict]:
         """返回大厅列表格式（符合 API 契约）。"""
         result = []
