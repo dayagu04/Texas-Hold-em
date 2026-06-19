@@ -73,4 +73,12 @@ export function connectionStatus(): ConnectionStatus {
   return transport.status();
 }
 
+/**
+ * 当前底层连接的 sid（真实 socket.id 或 mock fixture sid）。
+ * 重连后会变,组件应在连接状态变化时重取（见 TablePage useEffect）。
+ */
+export function getSid(): string | null {
+  return transport.getSid();
+}
+
 export const IS_MOCK = MOCK;

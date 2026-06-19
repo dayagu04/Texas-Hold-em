@@ -243,4 +243,12 @@ export class MockTransport implements Transport {
   status(): ConnectionStatus {
     return this.current;
   }
+
+  /**
+   * Mock 模式无真实 socket.id,返回当前 fixture 的 self sid
+   * (texas/brag/guandan 各自不同),保留现有 mySid 推断行为。
+   */
+  getSid(): string | null {
+    return this.getCurrentSelfSid();
+  }
 }

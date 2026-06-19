@@ -103,4 +103,8 @@ export class SocketIoTransport implements Transport {
   status(): ConnectionStatus {
     return this.current;
   }
+
+  getSid(): string | null {
+    return this.socket?.id ?? null;
+  }
 }

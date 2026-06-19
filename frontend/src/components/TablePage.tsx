@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth";
+import { getSid, onStatus } from "../socket";
 import TableShell from "./TableShell";
 import TexasBoard from "./tables/TexasBoard";
 import BragBoard from "./tables/BragBoard";
@@ -21,6 +22,8 @@ export default function TablePage() {
   const { name } = useAuth();
   const [state, setState] = useState<TableState | null>(null);
   const [priv, setPriv] = useState<PrivateState | null>(null);
+  // 真实 socket.id;mock 下为 fixture self sid。重连后会变,故订阅 status 刷新。
+  const [sid, setSid] = useState<string | null>(() => getSid());
 
   useEffect(() => {
     const offState = subscribe("table:state", setState);
@@ -31,6 +34,16 @@ export default function TablePage() {
     };
   }, [subscribe]);
 
+  // connect/reconnect 后 socket.id 会刷新,后端 connect 钩子会迁移
+  // engine.players 里的 sid → 这里跟随 status 重取,保证 mySid 一致。
+  useEffect(
+    () =>
+      onStatus((s) => {
+        if (s === "connected") setSid(getSid());
+      }),
+    [],
+  );
+
   if (!state) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-felt">
@@ -40,9 +53,11 @@ export default function TablePage() {
     );
   }
 
-  // 推断 mySid（从 players 找同名；mock 模式用 fixture 的 MOCK_SELF_SID）
+  // 优先用真实 socket.id;name 兜底兼容 mock / 极早期渲染。
+  // 不再首选 name 匹配,避免同名残留 player 命中错误的旧 sid
+  // (见 docs/features/bugfix-stale-player-no-actions.md)。
   const mySid =
-    state.players.find((p) => p.name === name)?.sid ?? "sid-me";
+    sid ?? state.players.find((p) => p.name === name)?.sid ?? "sid-me";
 
   return (
     <>

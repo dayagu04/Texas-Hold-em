@@ -79,4 +79,9 @@ export interface Transport {
   ): () => void;
   onStatus(handler: (status: ConnectionStatus) => void): () => void;
   status(): ConnectionStatus;
+  /**
+   * 当前底层 socket.id（真实连接）或 fixture sid（mock）。
+   * 未连接时返回 null。重连后会变,调用方需在 status 变化时重取。
+   */
+  getSid(): string | null;
 }
