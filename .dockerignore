@@ -1,0 +1,38 @@
+# Git
+.git
+.gitignore
+
+# Python
+.venv
+**/__pycache__
+**/.pytest_cache
+*.pyc
+*.pyo
+*.egg-info
+
+# Node
+**/node_modules
+frontend/dist
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Config files (will be mounted via volume)
+backend/allowed_users.json
+
+# Documentation
+docs/
+README.md
+
+# CI/CD
+.github
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

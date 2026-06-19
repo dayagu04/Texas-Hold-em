@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  poker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      # 挂载白名单配置（只读）
+      - ./backend/allowed_users.json:/app/backend/allowed_users.json:ro
+    environment:
+      # JWT 密钥（生产环境请修改）
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+    restart: unless-stopped
