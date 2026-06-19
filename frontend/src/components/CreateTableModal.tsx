@@ -237,7 +237,19 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
 
             {step === 3 && (
               <div className="space-y-2">
-                {Array.from({ length: seats }, (_, i) => (
+                {/* 座位 0 固定为房主，不可配 bot */}
+                <div className="flex items-center gap-3 rounded-card border border-gold/40 bg-gold/5 px-3 py-2 text-sm">
+                  <span className="w-16 text-text-lo">
+                    {zhCN.createTable.seatLabel(0)}
+                  </span>
+                  <span className="font-medium text-gold">
+                    {zhCN.createTable.youHost}
+                  </span>
+                </div>
+                {/* 座位 1 ~ (seats-1) 可配 bot */}
+                {Array.from({ length: seats - 1 }, (_, idx) => {
+                  const i = idx + 1;
+                  return (
                   <div key={i} className="flex items-center gap-3 text-sm">
                     <span className="w-16 text-text-lo">
                       {zhCN.createTable.seatLabel(i)}
@@ -283,7 +295,8 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
                       </span>
                     </label>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -297,11 +310,13 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
                 <p>
                   {seats} {zhCN.createTable.seats}
                 </p>
-                {botCount > 0 && (
-                  <p className="text-text-lo">
-                    {zhCN.createTable.previewBots(botCount)}
-                  </p>
-                )}
+                <p className="text-text-lo">
+                  {zhCN.createTable.previewComposition(
+                    1,
+                    botCount,
+                    Math.max(0, seats - 1 - botCount),
+                  )}
+                </p>
               </div>
             )}
           </aside>

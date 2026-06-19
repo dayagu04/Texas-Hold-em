@@ -67,7 +67,10 @@ export const zhCN = {
     botEasy: "简单",
     botNormal: "进阶",
     seatLabel: (n: number) => `座位 ${n}`,
+    youHost: "你（房主）",
     previewBots: (n: number) => `AI ${n} 个`,
+    previewComposition: (real: number, ai: number, empty: number) =>
+      `${real} 真人（你）+ ${ai} 个 AI + ${empty} 个空位`,
   },
 
   table: {
@@ -78,6 +81,10 @@ export const zhCN = {
     levelCard: (lv: string) => `打 ${lv}`,
     leave: "退出",
     startHand: "开始新局",
+    startGame: "开始游戏",
+    starting: "开始中…",
+    waitingHost: "等待房主开始",
+    needMorePlayers: (n: number) => `需至少 ${n} 人`,
     waitingStart: "等待开始",
     dealer: "庄家",
     addBot: "加入 AI",

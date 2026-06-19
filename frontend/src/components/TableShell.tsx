@@ -9,7 +9,14 @@ import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
 import { emit, subscribe } from "../socket";
 import Countdown from "./Countdown";
-import type { ActionLog, ChatMessage, CurrentTurn, LegalAction, PrivateState } from "../types";
+import type { ActionLog, ChatMessage, CurrentTurn, GameType, LegalAction, PrivateState, PublicPlayer } from "../types";
+
+/* 各玩法最小开局人数（对齐后端 min_players 校验）。 */
+const MIN_PLAYERS: Record<GameType, number> = {
+  texas: 2,
+  brag: 2,
+  guandan: 4,
+};
 
 interface Props {
   tableId: string;
@@ -18,6 +25,9 @@ interface Props {
   privateState: PrivateState | null;
   mySid: string;
   log: ActionLog[]; // 行动日志（来自 table:state）
+  gameType: GameType;
+  stage: string; // 牌局阶段；"waiting" = 未开局
+  players: PublicPlayer[];
   children: ReactNode; // board 区域
 }
 
@@ -28,6 +38,9 @@ export default function TableShell({
   privateState,
   mySid,
   log,
+  gameType,
+  stage,
+  players,
   children,
 }: Props) {
   const navigate = useNavigate();
@@ -39,6 +52,18 @@ export default function TableShell({
 
   const isMyTurn = currentTurn?.sid === mySid;
   const legalActions = privateState?.legal_actions ?? [];
+
+  // 房主 = 0 号位玩家；牌局未开局（waiting）时才展示开始入口。
+  const hostSid = players.find((p) => p.seat === 0)?.sid;
+  const isHost = hostSid != null && hostSid === mySid;
+  const notStarted = stage === "waiting";
+  const minPlayers = MIN_PLAYERS[gameType];
+  const seatedCount = players.length;
+  const enoughPlayers = seatedCount >= minPlayers;
+
+  const handleStartHand = () => {
+    emit("table:start_hand", { table_id: tableId });
+  };
 
   // 订阅聊天消息
   useEffect(() => {
@@ -93,7 +118,34 @@ export default function TableShell({
 
       <div className="flex flex-1">
         {/* 中央 board 区 */}
-        <main className="relative flex-1 p-6">{children}</main>
+        <main className="relative flex-1 p-6">
+          {/* 开始游戏入口（仅未开局时） */}
+          {notStarted && (
+            <div className="mb-4 flex items-center justify-center">
+              {isHost ? (
+                <div className="flex flex-col items-center gap-2">
+                  <button
+                    onClick={handleStartHand}
+                    disabled={!enoughPlayers}
+                    className="rounded-card bg-gold px-6 py-2.5 text-sm font-bold text-base transition hover:bg-gold-soft disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {zhCN.table.startGame}
+                  </button>
+                  {!enoughPlayers && (
+                    <span className="text-xs text-text-lo">
+                      {zhCN.table.needMorePlayers(minPlayers)}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span className="rounded-card border border-rim/50 px-4 py-2 text-sm text-text-lo">
+                  {zhCN.table.waitingHost}
+                </span>
+              )}
+            </div>
+          )}
+          {children}
+        </main>
 
         {/* 右侧聊天 */}
         <aside className="w-64 border-l border-rim/30 bg-base/60 p-4 backdrop-blur-sm">

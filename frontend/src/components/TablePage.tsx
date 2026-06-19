@@ -54,6 +54,9 @@ export default function TablePage() {
       privateState={priv}
       mySid={mySid}
       log={state.log}
+      gameType={state.game_type}
+      stage={state.stage}
+      players={state.players}
     >
       {state.game_type === "texas" && (
         <TexasBoard state={state} privateState={priv} mySid={mySid} />
