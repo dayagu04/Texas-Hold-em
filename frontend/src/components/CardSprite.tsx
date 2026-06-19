@@ -12,20 +12,23 @@ interface Props {
   className?: string;
 }
 
+// 后端 cards.py 发送小写花色 s/h/d/c（evaluator 依赖小写,见
+// docs/features/bugfix-create-stuck-card-display.md）。key 用小写,
+// 查表前 toLowerCase() 归一,兼容 mock fixture 里的大写花色。
 const SUIT_SYMBOL: Record<string, string> = {
-  S: "♠",
-  H: "♥",
-  D: "♦",
-  C: "♣",
-  J: "🃏",
+  s: "♠",
+  h: "♥",
+  d: "♦",
+  c: "♣",
+  j: "🃏",
 };
 
 const SUIT_COLOR: Record<string, string> = {
-  S: "text-text-hi",
-  H: "text-danger",
-  D: "text-danger",
-  C: "text-text-hi",
-  J: "text-gold",
+  s: "text-text-hi",
+  h: "text-danger",
+  d: "text-danger",
+  c: "text-text-hi",
+  j: "text-gold",
 };
 
 const RANK_LABEL: Record<number, string> = {
@@ -57,8 +60,9 @@ export default function CardSprite({ card, dim, animate, className = "" }: Props
 
   const rankLabel =
     RANK_LABEL[card.rank] ?? (card.rank >= 2 && card.rank <= 10 ? String(card.rank) : "?");
-  const suitSymbol = SUIT_SYMBOL[card.suit] ?? "?";
-  const suitColor = SUIT_COLOR[card.suit] ?? "text-text-lo";
+  const suitKey = card.suit.toLowerCase();
+  const suitSymbol = SUIT_SYMBOL[suitKey] ?? "?";
+  const suitColor = SUIT_COLOR[suitKey] ?? "text-text-lo";
 
   return (
     <div

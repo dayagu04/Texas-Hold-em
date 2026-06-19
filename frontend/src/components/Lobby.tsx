@@ -6,7 +6,7 @@
  * 右下 + 新建 按钮触发 CreateTableModal（M2 后半）。
  * 进入时 connectSocket，挂 ReconnectBanner。
  */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth";
@@ -53,6 +53,18 @@ export default function Lobby() {
     emit("lobby:join_table", { table_id: t.id });
     navigate(`/table/${t.id}`);
   };
+
+  // 稳定引用:内联箭头每次渲染换新引用,会让 CreateTableModal 的
+  // useEffect 频繁重订阅,localhost 极快的后端响应会落进解除/重订阅的
+  // 窗口里丢失 → 模态框卡"创建中"。navigate 是稳定引用。
+  // (见 docs/features/bugfix-create-stuck-card-display.md)
+  const handleCreated = useCallback(
+    (id: string) => {
+      setShowCreateModal(false);
+      navigate(`/table/${id}`);
+    },
+    [navigate],
+  );
 
   const toggleStatus = (s: TableStatus) => {
     const next = new Set(filterStatus);
@@ -219,10 +231,7 @@ export default function Lobby() {
       {showCreateModal && (
         <CreateTableModal
           onClose={() => setShowCreateModal(false)}
-          onCreated={(id) => {
-            setShowCreateModal(false);
-            navigate(`/table/${id}`);
-          }}
+          onCreated={handleCreated}
         />
       )}
     </div>
