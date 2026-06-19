@@ -9,6 +9,7 @@ import random
 from .auth import verify_token
 from .lobby import lobby
 from .logger import log
+from . import db
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
 
@@ -24,6 +25,8 @@ turn_timers: dict[str, asyncio.Task] = {}
 auto_start_timers: dict[str, asyncio.Task] = {}
 # table_id -> hand_id (已发送 hand_end 的 hand_id，避免重复发送)
 hand_end_sent: dict[str, str] = {}
+# table_id -> {sid: chips}  开局时筹码快照，用于结算净输赢（net = 结束时 chips - 快照）
+chips_snapshots: dict[str, dict[str, int]] = {}
 
 # 回合超时秒数（真人玩家未操作自动 fold/pass）
 TURN_TIMEOUT = 30
@@ -410,6 +413,7 @@ async def table_start_hand(sid, data):
         return
 
     engine.start_hand()
+    _snapshot_chips(table_id)
     await _broadcast_table_state(table_id)
     await _run_bot_loop(table_id)
 
@@ -601,8 +605,85 @@ async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT
     turn_timers[table_id] = asyncio.create_task(timeout_handler())
 
 
+def _snapshot_chips(table_id: str):
+    """开局时快照各玩家筹码，供结算净输赢使用（net = 结束时 chips - 开局时 chips）。"""
+    engine = lobby.get_table(table_id)
+    if not engine:
+        return
+    # 对有 chips 属性的引擎（德扑、炸金花）快照；掼蛋无 chips
+    if hasattr(list(engine.players.values())[0] if engine.players else None, "chips"):
+        chips_snapshots[table_id] = {
+            p.sid: p.chips for p in engine.players.values()
+        }
+    else:
+        # 掼蛋等无筹码引擎：快照空 dict（后续走排名逻辑）
+        chips_snapshots[table_id] = {}
+
+
+def _record_hand_to_db(engine):
+    """结算后记录本局到数据库（手牌刚结束时调用一次）。
+
+    对德扑/炸金花：净输赢 = 结束时 chips - 开局快照 chips
+    对掼蛋：净输赢 = 从 rankings/team score_delta 派生（v1 不持久化积分，记 0）
+    """
+    try:
+        table_id = engine.id
+        game_type = engine.game_type
+        pot = getattr(engine, "pot", 0)  # 掼蛋无 pot 属性
+
+        # 公共牌：德扑/炸金花有 community（Card 列表），掼蛋无
+        board = ""
+        if hasattr(engine, "community") and engine.community:
+            board = "".join(c.code for c in engine.community)
+
+        snapshot = chips_snapshots.get(table_id, {})
+        players_data = []
+
+        for p in engine.players.values():
+            # 底牌：开局时的 hole（现在可能为空，因部分引擎修改了 hole）
+            # 对德扑/炸金花，结束时 hole 保留；对掼蛋，结束时 hole 已出空
+            # 为准确记录起手牌，此处用结束时 hole（若已打完为空串）
+            hole = ""
+            if hasattr(p, "hole") and p.hole:
+                hole = "".join(c.code if hasattr(c, "code") else "" for c in p.hole)
+
+            # 总下注：德扑/炸金花有 total_bet，掼蛋无
+            total_bet = getattr(p, "total_bet", 0)
+
+            # 净输赢：优先用 chips 差值；掼蛋等无 chips 引擎记 0（积分走 team rank）
+            net = 0
+            if p.sid in snapshot:
+                net = p.chips - snapshot[p.sid]
+
+            # 结果：德扑/炸金花有 folded 属性；掼蛋用 rank 派生
+            result = None
+            if getattr(p, "folded", False):
+                result = "folded"
+            elif net > 0:
+                result = "won"
+            elif hasattr(p, "rank") and p.rank:
+                # 掼蛋：1、2 名视为赢（保守起见用 rank <= 2）
+                result = "won" if p.rank <= 2 else "lost"
+            else:
+                result = "lost" if net < 0 else "even"
+
+            players_data.append({
+                "name": p.name,
+                "seat": p.seat,
+                "is_bot": p.is_bot,
+                "hole": hole,
+                "total_bet": total_bet,
+                "net": net,
+                "result": result,
+            })
+
+        db.record_hand(table_id, game_type, pot, board, players_data)
+        chips_snapshots.pop(table_id, None)  # 清理快照
+    except Exception as e:
+        log(f"[db] record_hand failed for table={engine.id}: {e}")
+
+
 async def _broadcast_table_state(table_id: str):
-    """广播桌面状态。"""
     engine = lobby.get_table(table_id)
     if not engine:
         return
@@ -635,6 +716,9 @@ async def _broadcast_table_state(table_id: str):
             hand_end_payload = engine.get_hand_end_payload()
             await sio.emit("table:hand_end", hand_end_payload, room=table_id)
             hand_end_sent[table_id] = current_hand_id
+
+            # 记录本局到数据库（每局只记一次，由 hand_end_sent 去重保证）
+            _record_hand_to_db(engine)
 
             # 多局模式（#006）：next_hand_in > 0 时启动自动开下局定时器
             if hand_end_payload.get("next_hand_in", 0) > 0:
@@ -687,6 +771,7 @@ async def _maybe_auto_start(table_id: str):
     log(f"[auto_start] table={table_id}, humans={len(humans)} all ready, starting")
     _cancel_auto_start_timer(table_id)
     engine.start_hand()
+    _snapshot_chips(table_id)
     await _broadcast_table_state(table_id)
     await _run_bot_loop(table_id)
 

@@ -1,42 +1,23 @@
-"""用户资料管理模块。"""
-import json
-from pathlib import Path
-from typing import Optional
-
-PROFILES_FILE = Path(__file__).parent.parent / "user_profiles.json"
+"""用户资料管理模块（改用 SQLite 后端，签名保持兼容）。"""
+from . import db
 
 
 def load_profile(username: str) -> dict:
-    """读某用户资料,返回 {avatar: str | None} 或空 dict。"""
+    """读某用户资料，返回 {'avatar': <带版本号的url或None>}。
+
+    avatar URL 带缓存失效版本号：/static/avatars/xxx.jpg?v=<avatar_version>。
+    每次上传头像 version 自增，前端拿到的是新 URL，浏览器不会命中旧缓存。
+    """
     try:
-        if not PROFILES_FILE.exists():
-            return {}
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        # 跳过注释字段
-        if username in data and username != "_comment":
-            return data[username]
-        return {}
+        path, version = db.get_avatar(username)
+        if not path:
+            return {"avatar": None}
+        return {"avatar": f"{path}?v={version}"}
     except Exception:
-        return {}
+        return {"avatar": None}
 
 
 def save_avatar(username: str, avatar_url: str):
-    """保存某用户的头像 URL 到 user_profiles.json。"""
-    try:
-        # 读取现有数据
-        data = {}
-        if PROFILES_FILE.exists():
-            with open(PROFILES_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-
-        # 更新用户头像
-        if username not in data:
-            data[username] = {}
-        data[username]["avatar"] = avatar_url
-
-        # 写回文件
-        with open(PROFILES_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        raise RuntimeError(f"保存头像失败: {e}")
+    """保存某用户头像。存裸路径（去掉可能的 ?v=），版本号由 db 自增维护。"""
+    bare = avatar_url.split("?")[0]
+    db.set_avatar(username, bare)

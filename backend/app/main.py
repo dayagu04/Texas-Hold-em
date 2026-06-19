@@ -13,8 +13,12 @@ from .sio import sio, sessions, _broadcast_lobby_update
 from .auth import is_allowed, create_token, verify_token
 from .lobby import lobby
 from .profiles import load_profile, save_avatar
+from . import db
 
 app = FastAPI(title="Texas Hold'em Poker")
+
+# 启动时初始化 SQLite（建表 + WAL + 一次性迁移 JSON 头像）
+db.init_db()
 
 # 挂载 Socket.IO ASGI
 sio_app = socketio.ASGIApp(sio, other_asgi_app=app)
@@ -54,14 +58,16 @@ def me(authorization: str = Header(None)):
             "error": {"code": "INVALID_TOKEN", "message": "token 无效或已过期"}
         })
 
-    # 加载用户头像
+    # 加载用户头像（带缓存失效版本号）及持久积分
     profile = load_profile(payload["name"])
     avatar = profile.get("avatar")
+    user = db.get_or_create_user(payload["name"])
 
     return {
         "name": payload["name"],
         "expires_at": payload.get("exp"),
         "avatar": avatar,
+        "points": user["points"],
     }
 
 
@@ -121,11 +127,26 @@ async def upload_avatar(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # 更新用户资料
+    # 更新用户资料（save_avatar 存裸路径并自增版本号）
     avatar_url = f"/static/avatars/{filename}"
     save_avatar(username, avatar_url)
 
-    return {"avatar": avatar_url}
+    # 返回带缓存失效版本号的 URL，前端拿到新 URL 不会命中旧缓存
+    _, version = db.get_avatar(username)
+    return {"avatar": f"{avatar_url}?v={version}"}
+
+
+@app.get("/api/profile/stats")
+def profile_stats(username: str = Depends(get_current_user)):
+    """返回当前用户的积分与统计。"""
+    return db.get_stats(username)
+
+
+@app.get("/api/profile/history")
+def profile_history(limit: int = 20, username: str = Depends(get_current_user)):
+    """返回当前用户最近对局历史（含同局所有玩家的牌与下注）。limit 上限 50。"""
+    limit = max(1, min(int(limit), 50))
+    return {"history": db.get_history(username, limit)}
 
 
 

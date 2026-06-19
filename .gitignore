@@ -35,3 +35,8 @@ backend/allowed_users.json
 
 # Internal docs (temporary work artifacts, do not commit)
 docs/internal/
+
+# SQLite DB
+backend/poker.db
+backend/poker.db-wal
+backend/poker.db-shm
