@@ -37,13 +37,15 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
   const [isCreating, setIsCreating] = useState(false);
 
   useEffect(() => {
+    // 这个 modal 打开期间唯一可能触发 lobby:joined 的就是本次 create_table。
+    // 不要加 if (isCreating) 守卫——闭包陷阱：后端响应极快时，事件可能被
+    // isCreating=false 的旧闭包收到，守卫为 false 直接吞掉 → 永久卡"创建中"。
+    // onCreated 内部 navigate 会卸载本组件，自动解绑监听，不会重复触发。
     const off = subscribe("lobby:joined", (data) => {
-      if (isCreating) {
-        onCreated(data.table_id);
-      }
+      onCreated(data.table_id);
     });
     return off;
-  }, [subscribe, onCreated, isCreating]);
+  }, [subscribe, onCreated]);
 
   const handleGameSelect = (g: GameType) => {
     setGameType(g);
