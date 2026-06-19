@@ -33,6 +33,7 @@ class Player:
         self.hole: list[Card] = []
         self.rank: int | None = None  # 1/2/3/4
         self.sitting_out = False
+        self.ready = False  # 准备机制（多真人自动开局）；bot 在 add_player 置 True
 
     def reset_for_hand(self):
         self.hole = []
@@ -72,6 +73,8 @@ class GuandanEngine:
         if len(self.players) >= 4:
             raise ValueError("掼蛋固定 4 人")
         player = Player(sid, name, seat, is_bot, bot_level)
+        if is_bot:
+            player.ready = True
         self.players[sid] = player
 
     def remove_player(self, sid: str) -> None:
@@ -111,6 +114,10 @@ class GuandanEngine:
         # v1 首局：持有红心 4 者先出
         first_sid = self._find_heart_4_holder()
         self.current_turn = first_sid if first_sid else seated[0].sid
+
+        # 准备机制：开局成功后重置真人 ready，bot 保持 True
+        for p in self.players.values():
+            p.ready = p.is_bot
 
     def handle_action(self, sid: str, action: str, payload: dict) -> tuple[bool, str]:
         if sid != self.current_turn:
@@ -175,6 +182,7 @@ class GuandanEngine:
                 "is_bot": p.is_bot,
                 "bot_level": p.bot_level,
                 "status": "won" if p.rank else "active",
+                "ready": p.ready,
             }
 
         team_a = [p.sid for p in self.players.values() if p.seat in [0, 2]]
@@ -207,7 +215,7 @@ class GuandanEngine:
         """私有状态：底牌 + 合法操作。"""
         player = self.players.get(sid)
         if not player:
-            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": []}
+            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": [], "hand_rank": None}
 
         legal = self._legal_actions(player)
         return {
@@ -215,6 +223,7 @@ class GuandanEngine:
             "hand_id": str(self.hand_id),
             "hole": [c.to_dict() for c in player.hole],
             "legal_actions": legal,
+            "hand_rank": None,
         }
 
     def is_hand_over(self) -> bool:

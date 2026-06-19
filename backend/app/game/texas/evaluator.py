@@ -68,3 +68,29 @@ def evaluate_best(cards: list[Card]) -> tuple:
         if best is None or score > best:
             best = score
     return best
+
+
+def evaluate_partial(cards: list[Card]) -> tuple:
+    """对任意 1~7 张牌算当前最大牌型，返回 (category, *tiebreakers)。
+
+    >=5 张走 evaluate_best；<5 张只能形成 三条/两对/一对/高牌，
+    用 Counter 数同点判断。category 数值对齐 CATEGORY_NAMES
+    （0=高牌, 1=一对, 2=两对, 3=三条）。
+    """
+    if len(cards) >= 5:
+        return evaluate_best(cards)
+
+    ranks = sorted((c.rank for c in cards), reverse=True)
+    rank_counts = Counter(ranks)
+    # 按出现次数、再按点数排序
+    by_count = sorted(rank_counts.items(), key=lambda x: (x[1], x[0]), reverse=True)
+    counts = [c for _, c in by_count]
+    ordered_ranks = [r for r, _ in by_count]
+
+    if counts and counts[0] == 3:
+        return (3, ordered_ranks[0], *ordered_ranks[1:])
+    if len(counts) >= 2 and counts[0] == 2 and counts[1] == 2:
+        return (2, ordered_ranks[0], ordered_ranks[1], *ordered_ranks[2:])
+    if counts and counts[0] == 2:
+        return (1, ordered_ranks[0], *ordered_ranks[1:])
+    return (0, *ranks)

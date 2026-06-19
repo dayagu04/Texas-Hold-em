@@ -10,6 +10,7 @@
 from enum import Enum
 
 from ..cards import Deck
+# from ..logger import log  # logger 模块暂不存在，暂时禁用
 from .evaluator import evaluate_brag_hand, CATEGORY_NAMES
 
 
@@ -32,6 +33,7 @@ class Player:
         self.looked = False  # 是否已看牌
         self.folded = False
         self.sitting_out = False
+        self.ready = False  # 准备机制（多真人自动开局）；bot 在 add_player 置 True
 
     def reset_for_hand(self):
         self.hole = []
@@ -76,6 +78,8 @@ class BragEngine:
     def add_player(self, sid: str, name: str, seat: int,
                    is_bot: bool = False, bot_level: str | None = None) -> None:
         player = Player(sid, name, seat, self.initial_chips, is_bot, bot_level)
+        if is_bot:
+            player.ready = True
         self.players[sid] = player
 
     def remove_player(self, sid: str) -> None:
@@ -109,6 +113,11 @@ class BragEngine:
         seats = [p.seat for p in ready]
         self.button = self._next_seat(self.button, seats)
 
+        # 收取底注进底池
+        for p in ready:
+            self._place_bet(p, self.ante)
+        # log(f"[brag start_hand] collected ante: {self.ante} from {len(ready)} players, pot={self.pot}")
+
         # 发 3 张暗牌
         for p in ready:
             p.hole = self.deck.deal(3)
@@ -116,6 +125,10 @@ class BragEngine:
         # 首个行动者：庄家后第一位
         first_seat = self._next_seat(self.button, seats)
         self.current_turn = self._seat_player(first_seat).sid
+
+        # 准备机制：开局成功后重置真人 ready，bot 保持 True
+        for p in self.players.values():
+            p.ready = p.is_bot
 
     def handle_action(self, sid: str, action: str, payload: dict) -> tuple[bool, str]:
         if sid != self.current_turn:
@@ -194,6 +207,7 @@ class BragEngine:
                 "bot_level": p.bot_level,
                 "chips": p.chips,
                 "status": self._player_status(p),
+                "ready": p.ready,
             }
 
         active_sids = [p.sid for p in self._active_players()]
@@ -220,14 +234,19 @@ class BragEngine:
         """私有状态：底牌 + 合法操作。"""
         player = self.players.get(sid)
         if not player:
-            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": []}
+            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": [], "hand_rank": None}
 
         legal = self._legal_actions(player)
+        hand_rank = None
+        if player.hole and len(player.hole) == 3:
+            cat, *_ = evaluate_brag_hand([c.to_dict() for c in player.hole])
+            hand_rank = {"category": cat, "name": CATEGORY_NAMES.get(cat, "")}
         return {
             "table_id": self.id,
             "hand_id": str(self.hand_id),
             "hole": [c.to_dict() for c in player.hole],
             "legal_actions": legal,
+            "hand_rank": hand_rank,
         }
 
     def is_hand_over(self) -> bool:

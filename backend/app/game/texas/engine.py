@@ -5,7 +5,7 @@
 from enum import Enum
 
 from ..cards import Deck
-from .evaluator import CATEGORY_NAMES, evaluate_best
+from .evaluator import CATEGORY_NAMES, evaluate_best, evaluate_partial
 
 
 class Stage(str, Enum):
@@ -33,6 +33,7 @@ class Player:
         self.all_in = False
         self.acted = False
         self.sitting_out = False
+        self.ready = False  # 准备机制（多真人自动开局）；bot 在 add_player 置 True
 
     def reset_for_hand(self):
         self.hole = []
@@ -82,6 +83,8 @@ class TexasEngine:
     def add_player(self, sid: str, name: str, seat: int,
                    is_bot: bool = False, bot_level: str | None = None) -> None:
         player = Player(sid, name, seat, self.initial_chips, is_bot, bot_level)
+        if is_bot:
+            player.ready = True
         self.players[sid] = player
 
     def remove_player(self, sid: str) -> None:
@@ -116,6 +119,10 @@ class TexasEngine:
             p.hole = self.deck.deal(2)
 
         self._post_blinds(ready, seats)
+
+        # 准备机制：开局成功后重置真人 ready，bot 保持 True
+        for p in self.players.values():
+            p.ready = p.is_bot
 
     def handle_action(self, sid: str, action: str, payload: dict) -> tuple[bool, str]:
         if sid != self.current_turn:
@@ -175,6 +182,7 @@ class TexasEngine:
                 "bot_level": p.bot_level,
                 "chips": p.chips,
                 "status": self._player_status(p),
+                "ready": p.ready,
             }
 
         return {
@@ -200,14 +208,20 @@ class TexasEngine:
         """私有状态：底牌 + 合法操作。"""
         player = self.players.get(sid)
         if not player:
-            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": []}
+            return {"table_id": self.id, "hand_id": str(self.hand_id), "hole": [], "legal_actions": [], "hand_rank": None}
 
         legal = self._legal_actions(player)
+        hand_rank = None
+        if player.hole:
+            cards = player.hole + self.community  # 翻牌前 community 为 []
+            cat, *_ = evaluate_partial(cards)
+            hand_rank = {"category": cat, "name": CATEGORY_NAMES.get(cat, "")}
         return {
             "table_id": self.id,
             "hand_id": str(self.hand_id),
             "hole": [c.to_dict() for c in player.hole],
             "legal_actions": legal,
+            "hand_rank": hand_rank,
         }
 
     def is_hand_over(self) -> bool:

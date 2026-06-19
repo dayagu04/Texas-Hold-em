@@ -12,6 +12,7 @@ import type {
   Transport,
 } from "../socketEvents";
 import { API_BASE } from "../api";
+import { debugLog } from "../utils/debug";
 
 type TypedSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -37,6 +38,7 @@ export class SocketIoTransport implements Transport {
 
     socket.on("connect", () => {
       console.log("[socket] connected, socket.id:", socket.id);
+      debugLog(`[socket] connected event, socket.id=${socket.id}`);
       this.setStatus("connected");
       // 重连成功后立即拉一次大厅（API-CONTRACT §4）
       socket.emit("lobby:list", {});
@@ -44,11 +46,13 @@ export class SocketIoTransport implements Transport {
 
     socket.on("disconnect", (reason) => {
       console.log("[socket] disconnected, reason:", reason);
+      debugLog(`[socket] disconnect, reason=${reason}`);
       this.setStatus("disconnected");
     });
 
     socket.on("connect_error", (err) => {
       console.error("[socket] connect_error:", err.message, err);
+      debugLog(`[socket] connect_error: ${err.message}`);
       this.setStatus("disconnected");
     });
 

@@ -13,12 +13,13 @@
 | 5 | [UI-DESIGN.md](../design/UI-DESIGN.md) | 前端 / 设计 | 视觉规范、页面与组件 |
 | 6 | [AI-BOTS.md](../design/AI-BOTS.md) | 后端 | 人机插件接口与各玩法策略 |
 | 7 | [HANDOFF.md](./HANDOFF.md) | 两个 agent | 每个 agent 的任务清单与验收标准 |
+| 8 | [PM-HANDOFF.md](./PM-HANDOFF.md) | PM agent | PM 角色定义、工作流、文档地图 |
 
 ## 阅读路径
 
 - **后端 agent**：PRD → ARCHITECTURE → GAME-RULES → API-CONTRACT → AI-BOTS → HANDOFF（后端段）
 - **前端 agent**：PRD → ARCHITECTURE → UI-DESIGN → API-CONTRACT → HANDOFF（前端段）
-- **PM / 协调者**：PRD → HANDOFF
+- **PM / 协调者**：PM-HANDOFF → PRD → HANDOFF
 
 ## 现状基线
 

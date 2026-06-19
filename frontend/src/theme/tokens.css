@@ -26,6 +26,21 @@
   --color-tag-guandan: #1f3a6b;
   --color-tag-brag: #4a2363;
 
+  /* 扑克牌面语义色（红黑标准色 + 米白牌面，CardSprite 专用）：
+     红桃♥/方块♦=card-red，黑桃♠/梅花♣=card-ink，牌面底=card-face。 */
+  --color-card-red: #d4262a; /* 标准扑克红 */
+  --color-card-ink: #1b1815; /* 近黑（带暖调，避免死黑） */
+  --color-card-face: #f6f1e6; /* 牌面米白 */
+  --color-card-edge: #d8cfb8; /* 牌缘细描边（暖灰，模拟纸卡切边） */
+
+  /* 筹码分档色（真实赌场惯例：白/红/绿/黑/紫），ChipStack 按金额选色。
+     条纹点用 card-face 米白做对比。 */
+  --color-chip-white: #e9e6df;
+  --color-chip-red: #c23a32;
+  --color-chip-green: #1f8a4c;
+  --color-chip-black: #20201d;
+  --color-chip-purple: #6b3fa0;
+
   /* ---- 圆角 ---- */
   --radius-card: 8px; /* rounded-card：牌 / 小卡 */
   --radius-panel: 16px; /* rounded-panel：面板 / 弹窗 */
@@ -33,6 +48,14 @@
   /* ---- 阴影 ---- */
   --shadow-card: 0 2px 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(201, 161, 74, 0.15) inset;
   --shadow-elev: 0 12px 40px rgba(0, 0, 0, 0.55);
+  /* 牌面浮起投影（让牌"浮"在毡布上更立体，Task B）。
+     叠加：贴边接触阴影 + 中距柔影 + 远距大投影，营造厚度感。 */
+  --shadow-float:
+    0 1px 1px rgba(0, 0, 0, 0.55),
+    0 4px 8px rgba(0, 0, 0, 0.4),
+    0 10px 22px rgba(0, 0, 0, 0.45);
+  /* 筹码堆叠投影（贴桌接触影 + 短柔影） */
+  --shadow-chip: 0 1px 1px rgba(0, 0, 0, 0.45), 0 3px 6px rgba(0, 0, 0, 0.4);
 
   /* ---- 动效时长（var() 引用；framer-motion 数值见 theme/motion.ts，保持一致） ---- */
   --duration-fast: 120ms; /* duration-fast：面板淡入 */
@@ -51,6 +74,41 @@
 :root {
   --felt: radial-gradient(ellipse at center, #1f6f4f 0%, #0d3a2a 70%, #061d14 100%);
   --vignette: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+
+  /* 牌面微暖渐变：顶部偏亮高光 → 中段米白 → 底部略压暗，模拟纸面受光（CardSprite 正面底色） */
+  --card-face-bg: linear-gradient(
+    158deg,
+    #fefcf7 0%,
+    #fbf7ee 28%,
+    var(--color-card-face) 62%,
+    #e9dfca 100%
+  );
+
+  /* 牌面顶部光泽叠层：左上柔和高光，给牌面一点卡片光感（叠在 face-bg 之上） */
+  --card-gloss:
+    radial-gradient(
+      120% 80% at 25% 0%,
+      rgba(255, 255, 255, 0.6) 0%,
+      rgba(255, 255, 255, 0) 55%
+    );
+
+  /* 牌背：金色菱形暗纹网格 + 居中徽记渐变，叠在暗棕底上（更细腻的双向斜纹） */
+  --card-back-bg:
+    repeating-linear-gradient(
+      45deg,
+      rgba(201, 161, 74, 0.22) 0,
+      rgba(201, 161, 74, 0.22) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(201, 161, 74, 0.22) 0,
+      rgba(201, 161, 74, 0.22) 1px,
+      transparent 1px,
+      transparent 6px
+    ),
+    radial-gradient(ellipse at 50% 42%, #43361f 0%, #2a2012 55%, #1c1409 100%);
 }
 
 /* felt 桌面背景：bg-felt */
@@ -62,6 +120,21 @@
 @utility bg-vignette {
   background-color: var(--color-base);
   background-image: var(--vignette);
+}
+
+/* 牌正面底纹：bg-card-front（avoid clash with auto-generated bg-card-face from --color-card-face） */
+@utility bg-card-front {
+  background: var(--card-face-bg);
+}
+
+/* 牌背暗纹：bg-card-back */
+@utility bg-card-back {
+  background: var(--card-back-bg);
+}
+
+/* 牌面光泽叠层：bg-card-gloss（绝对定位覆盖层用，给正面加左上高光） */
+@utility bg-card-gloss {
+  background: var(--card-gloss);
 }
 
 /* ---- Keyframes（docs/UI-DESIGN.md §8 动效清单） ---- */
@@ -136,5 +209,37 @@
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+/* 筹码入场：从玩家方向（上方）抛入，落地轻微回弹 settle（Task 4） */
+@keyframes chipToss {
+  0% {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.6) rotate(-12deg);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(3px) scale(1.06) rotate(2deg);
+  }
+  80% {
+    transform: translateY(-1px) scale(0.99) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+/* 加注高亮：金色脉冲一下（Task 4，金额增加时醒目） */
+@keyframes raisePulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(231, 200, 122, 0);
+  }
+  35% {
+    box-shadow: 0 0 14px 3px rgba(231, 200, 122, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(231, 200, 122, 0);
   }
 }

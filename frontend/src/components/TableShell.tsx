@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
 import { emit, subscribe } from "../socket";
+import { debugLog } from "../utils/debug";
 import Countdown from "./Countdown";
 import HandEndModal from "./HandEndModal";
 import type { ActionLog, ChatMessage, CurrentTurn, GameType, HandEnd, LegalAction, PrivateState, PublicPlayer } from "../types";
@@ -64,8 +65,46 @@ export default function TableShell({
   const seatedCount = players.length;
   const enoughPlayers = seatedCount >= minPlayers;
 
+  // 准备机制：≥2 真人时改用"准备"流程，全部真人准备后端自动开局。
+  const humanPlayers = players.filter((p) => !p.is_bot);
+  const humanCount = humanPlayers.length;
+  const me = players.find((p) => p.sid === mySid);
+  const iAmReady = me?.ready ?? false;
+  const readyCount = humanPlayers.filter((p) => p.ready).length;
+  const useReadyFlow = humanCount >= 2;
+
+  // 诊断日志：开始按钮显示条件
+  useEffect(() => {
+    if (notStarted) {
+      debugLog("[TableShell] Game not started", {
+        isHost,
+        hostSid,
+        mySid,
+        enoughPlayers,
+        seatedCount,
+        minPlayers,
+        gameType,
+        stage,
+      });
+    }
+  }, [
+    notStarted,
+    isHost,
+    hostSid,
+    mySid,
+    enoughPlayers,
+    seatedCount,
+    minPlayers,
+    gameType,
+    stage,
+  ]);
+
   const handleStartHand = () => {
     emit("table:start_hand", { table_id: tableId });
+  };
+
+  const handleToggleReady = () => {
+    emit("table:set_ready", { table_id: tableId, ready: !iAmReady });
   };
 
   // 订阅聊天消息
@@ -134,7 +173,44 @@ export default function TableShell({
           {/* 开始游戏入口（仅未开局时） */}
           {notStarted && (
             <div className="mb-4 flex items-center justify-center">
-              {isHost ? (
+              {useReadyFlow ? (
+                /* ≥2 真人：准备流程（每个真人自己点，全部准备后端自动开局） */
+                <div className="flex flex-col items-center gap-3">
+                  <button
+                    onClick={handleToggleReady}
+                    className={`rounded-card px-6 py-2.5 text-sm font-bold transition ${
+                      iAmReady
+                        ? "border-2 border-gold bg-transparent text-gold hover:bg-gold/10"
+                        : "bg-gold text-base hover:bg-gold-soft"
+                    }`}
+                  >
+                    {iAmReady ? zhCN.table.cancelReady : zhCN.table.ready}
+                  </button>
+                  <span className="text-xs text-text-lo">
+                    {zhCN.table.readyStatus(readyCount, humanCount)}
+                  </span>
+                  <ul className="flex flex-col gap-1 text-xs">
+                    {humanPlayers.map((p) => (
+                      <li key={p.sid} className="flex items-center gap-2">
+                        <span
+                          className={p.ready ? "text-gold" : "text-text-lo"}
+                        >
+                          {p.ready ? "✓" : "○"}
+                        </span>
+                        <span className="text-text-hi">{p.name}</span>
+                        <span className="text-text-lo">
+                          {p.ready
+                            ? zhCN.table.playerReady
+                            : zhCN.table.playerNotReady}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <span className="text-xs text-text-lo/70">
+                    {zhCN.table.waitingReady}
+                  </span>
+                </div>
+              ) : isHost ? (
                 <div className="flex flex-col items-center gap-2">
                   <button
                     onClick={handleStartHand}
@@ -157,6 +233,18 @@ export default function TableShell({
             </div>
           )}
           {children}
+
+          {/* 实时牌型预览框（仅自己可见，数据来自 private_state.hand_rank；掼蛋为 null 不显示） */}
+          {privateState?.hand_rank?.name && (
+            <div className="absolute bottom-4 right-4 rounded-panel border border-gold/40 bg-base/80 px-4 py-2 backdrop-blur-sm">
+              <span className="text-xs text-text-lo">
+                {zhCN.table.currentHand}
+              </span>
+              <span className="ml-2 text-sm font-bold text-gold">
+                {privateState.hand_rank.name}
+              </span>
+            </div>
+          )}
         </main>
 
         {/* 右侧聊天 */}
@@ -196,10 +284,14 @@ export default function TableShell({
         </aside>
       </div>
 
-      {/* 底部行动条（仅我的回合显示） */}
-      {isMyTurn && currentTurn && (
-        <footer className="border-t border-rim/30 bg-base/90 px-6 py-4 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-4xl items-center gap-4">
+      {/* 底部行动条（常驻，非我回合时透明隐藏） */}
+      <footer
+        className={`h-24 border-t border-rim/30 bg-base/90 px-6 py-4 backdrop-blur-sm transition-opacity duration-300 ${
+          isMyTurn && currentTurn ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+      >
+        {isMyTurn && currentTurn && (
+          <div className="mx-auto flex h-full max-w-4xl items-center gap-4">
             <Countdown deadline={currentTurn.deadline} />
             <div className="flex flex-1 flex-wrap gap-2">
               {legalActions.map((a) => (
@@ -213,8 +305,8 @@ export default function TableShell({
               ))}
             </div>
           </div>
-        </footer>
-      )}
+        )}
+      </footer>
 
       {/* aria-live 朗读关键动作 */}
       <div className="sr-only" aria-live="polite" aria-atomic="true">

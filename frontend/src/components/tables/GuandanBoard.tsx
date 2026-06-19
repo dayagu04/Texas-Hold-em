@@ -50,7 +50,7 @@ export default function GuandanBoard({ state, privateState, mySid }: Props) {
           {zhCN.table.levelCard(String(level_card))}
         </span>
         <span className="rounded-full border border-rim bg-base/80 px-3 py-1 backdrop-blur-sm">
-          {myTeam === "A" ? "队伍 A" : "队伍 B"}
+          {zhCN.table.team(myTeam)}
         </span>
       </div>
 

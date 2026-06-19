@@ -49,6 +49,10 @@ export interface ClientToServerEvents {
   }) => void;
   "table:remove_bot": (payload: { table_id: string; seat: number }) => void;
   "table:start_hand": (payload: { table_id: string }) => void;
+  // 准备机制：waiting 阶段每个真人自己点准备/取消（bot 恒 ready）。
+  "table:set_ready": (payload: { table_id: string; ready: boolean }) => void;
+  // 挂载后主动请求一次当前牌桌状态（后端定向重推 table:state + table:private）。
+  "table:sync": (payload: { table_id: string }) => void;
 }
 
 export type ServerEvent = keyof ServerToClientEvents;

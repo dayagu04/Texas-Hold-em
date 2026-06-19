@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
 import CardSprite from "../CardSprite";
+import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
 import DealerButton from "../DealerButton";
 import type { Card, PrivateState, TexasTableState } from "../../types";
@@ -39,8 +40,10 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
 
   return (
     <div className="relative h-full">
-      {/* 椭圆桌面 */}
-      <div className="absolute inset-10 rounded-[50%] border-8 border-rim bg-felt shadow-[inset_0_0_60px_rgba(0,0,0,0.6)]">
+      {/* 椭圆桌面：金属内沿高光 + 更柔和暗角 */}
+      <div className="absolute inset-10 rounded-[50%] border-8 border-rim bg-felt shadow-[inset_0_2px_3px_rgba(201,161,74,0.2),inset_0_0_80px_rgba(0,0,0,0.65),0_20px_50px_rgba(0,0,0,0.5)]">
+        {/* 桌面暗角层（柔和聚光，叠在毡布上） */}
+        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.4)_100%)]" />
         {/* 中央区：公共牌 + pot */}
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-4">
           {/* pot */}
@@ -130,19 +133,24 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
               {p.seat === button_seat && (
                 <DealerButton className="absolute -top-2 -left-2" />
               )}
-              {/* 当前轮下注筹码 — M4 筹码入池动画 */}
+              {/* 当前轮下注筹码 — M4 筹码堆叠 + 抛入动画 + 加注金色脉冲（Task 4） */}
               <AnimatePresence mode="wait">
                 {bet > 0 && (
                   <motion.div
                     key={`bet-${p.sid}-${bet}`}
-                    initial={{ scale: 0.5, y: -10, opacity: 0 }}
-                    animate={{ scale: 1, y: 0, opacity: 1 }}
-                    exit={{ scale: 0.8, y: -20, opacity: 0 }}
-                    transition={{ duration: 0.32, ease: [0.4, 0, 0.2, 1] }}
-                    className="absolute -bottom-8 left-1/2 -translate-x-1/2 rounded-full border border-gold/50 bg-base/90 px-3 py-1 text-xs font-bold text-gold shadow-card backdrop-blur-sm"
+                    initial={{ y: -30, opacity: 0, scale: 0.6, rotate: -10 }}
+                    animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ y: -25, opacity: 0, scale: 0.75 }}
+                    transition={{
+                      duration: 0.45,
+                      ease: [0.2, 0.8, 0.3, 1],
+                      opacity: { duration: 0.3 },
+                    }}
+                    className="absolute -bottom-9 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-gold/70 bg-base/95 px-3 py-1.5 text-xs font-bold text-gold shadow-[0_0_0_rgba(231,200,122,0),var(--shadow-chip)] backdrop-blur-sm animate-[raisePulse_560ms_ease-out]"
                     style={{ fontFamily: "var(--font-mono)" }}
                   >
-                    {bet}
+                    <ChipStack amount={bet} size={15} />
+                    <span>{bet}</span>
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -49,6 +49,7 @@ export interface PublicPlayer {
   bot_level?: BotLevel;
   chips: number;
   status: PlayerStatus;
+  ready?: boolean; // 准备机制：waiting 阶段是否已准备（bot 恒 true）
 }
 
 /* ---- 行动日志（API-CONTRACT §2.4 ActionLog）---- */
@@ -81,6 +82,8 @@ export interface PrivateState {
   hand_id: string;
   hole: Card[];
   legal_actions: LegalAction[];
+  // 实时牌型预览：德州/炸金花有值，掼蛋为 null。仅定向推给本人。
+  hand_rank?: { category: number; name: string } | null;
 }
 
 /* ---- 错误码（API-CONTRACT §2.6）---- */
@@ -132,4 +135,5 @@ export interface LoginResponse {
 export interface MeResponse {
   name: string;
   expires_at: string;
+  avatar?: string | null;
 }

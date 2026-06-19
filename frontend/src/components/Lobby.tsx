@@ -12,6 +12,7 @@ import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth";
 import { connectSocket } from "../socket";
 import { zhCN } from "../i18n/zh-CN";
+import * as api from "../api";
 import CreateTableModal from "./CreateTableModal";
 import ReconnectBanner from "./ReconnectBanner";
 import type { GameType, LobbyTable, TableStatus } from "../types";
@@ -32,10 +33,19 @@ export default function Lobby() {
     new Set(["waiting", "playing"]),
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(null);
 
   // 进入大厅时建立 socket 连接（幂等）
   useEffect(() => {
     connectSocket();
+  }, []);
+
+  // 加载头像
+  useEffect(() => {
+    api
+      .me()
+      .then((res) => setAvatar(res.avatar ?? null))
+      .catch(() => setAvatar(null));
   }, []);
 
   useEffect(() => {
@@ -93,7 +103,25 @@ export default function Lobby() {
             {zhCN.brand}
           </h1>
           <div className="flex items-center gap-3 text-text-lo">
+            {/* 头像 */}
+            {avatar ? (
+              <img
+                src={avatar}
+                className="h-10 w-10 rounded-full object-cover border border-gold/30"
+                alt={name ?? "头像"}
+              />
+            ) : (
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
+                {name?.[0]?.toUpperCase() ?? "?"}
+              </div>
+            )}
             <span className="text-text-hi">{name}</span>
+            <button
+              onClick={() => navigate("/profile")}
+              className="rounded-card border border-rim px-3 py-1 text-sm transition hover:border-gold/50"
+            >
+              个人中心
+            </button>
             <button
               onClick={handleLogout}
               className="rounded-card border border-rim px-3 py-1 text-sm transition hover:border-gold/50"

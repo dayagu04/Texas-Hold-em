@@ -4,6 +4,7 @@ import Login from "./components/Login";
 import GameSelection from "./components/GameSelection";
 import Lobby from "./components/Lobby";
 import TablePage from "./components/TablePage";
+import ProfilePage from "./components/ProfilePage";
 import type { ReactNode } from "react";
 
 /** 路由守卫：未登录访问受保护路径自动跳 /login。 */
@@ -24,6 +25,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Lobby />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
             </RequireAuth>
           }
         />

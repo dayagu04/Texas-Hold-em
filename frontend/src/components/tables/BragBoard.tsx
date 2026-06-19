@@ -8,6 +8,7 @@
 import { motion } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
 import CardSprite from "../CardSprite";
+import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
 import { emit } from "../../socket";
 import type { BragTableState, PrivateState } from "../../types";
@@ -49,12 +50,16 @@ export default function BragBoard({ state, privateState, mySid }: Props) {
             </div>
           </div>
           <div className="flex gap-4 text-xs text-text-lo">
-            <span>
-              {zhCN.createTable.ante}: {ante}
-            </span>
-            <span>
-              {zhCN.table.currentBet}: {current_bet}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span>{zhCN.createTable.ante}:</span>
+              <ChipStack amount={ante} size={12} />
+              <span className="font-mono">{ante}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span>{zhCN.table.currentBet}:</span>
+              <ChipStack amount={current_bet} size={12} />
+              <span className="font-mono">{current_bet}</span>
+            </div>
           </div>
           <div className="rounded-full border border-rim bg-base/60 px-4 py-1 text-sm text-text-hi backdrop-blur-sm">
             {stageText}

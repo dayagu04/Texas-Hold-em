@@ -196,6 +196,9 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
         if name in name_to_sid and name_to_sid[name] == sid:
             del name_to_sid[name]
 
+        if table_id:
+            _destroy_table_if_no_humans(table_id)
+
         log(f"[timeout] {sid} session cleaned after disconnect")
 
     except asyncio.CancelledError:
@@ -336,6 +339,7 @@ async def lobby_join_table(sid, data):
     await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": seat}, room=sid)
     await _broadcast_table_state(table_id)
     await _broadcast_lobby_update()
+    await _maybe_auto_start(table_id)
 
 
 @sio.on('lobby:leave_table')
@@ -354,6 +358,35 @@ async def lobby_leave_table(sid, data):
         await _broadcast_lobby_update()
 
     sess["table_id"] = None
+    _destroy_table_if_no_humans(table_id)
+
+
+@sio.on('table:sync')
+async def table_sync(sid, data):
+    """前端牌桌页挂载后主动请求当前状态：对该 sid 定向重推一次 public + private。
+
+    纯只读，无任何座位/入座副作用，天然幂等。修复"创建房间卡加载中"（广播时机竞争）。
+    """
+    sess = sessions.get(sid)
+    if not sess:
+        return
+
+    table_id = data.get("table_id")
+    engine = lobby.get_table(table_id)
+    log(f"[table:sync] sid={sid}, table_id={table_id}, found={engine is not None}")
+    if not engine:
+        return
+
+    # 防御性确保该 sid 在房间内（幂等，重复 enter 无害）
+    await sio.enter_room(sid, table_id)
+
+    # 定向重推 public 状态
+    await sio.emit("table:state", engine.public_state(), room=sid)
+
+    # 仅当该 sid 是真人玩家（在 engine.players 且非 bot）时才推 private
+    player = engine.players.get(sid)
+    if player is not None and not getattr(player, "is_bot", False):
+        await sio.emit("table:private", engine.private_state(sid), room=sid)
 
 
 # ---- 桌面事件 ----
@@ -379,6 +412,26 @@ async def table_start_hand(sid, data):
     engine.start_hand()
     await _broadcast_table_state(table_id)
     await _run_bot_loop(table_id)
+
+
+@sio.on('table:set_ready')
+async def table_set_ready(sid, data):
+    """玩家准备/取消准备。≥2 真人全部准备后自动开局（见 _maybe_auto_start）。"""
+    sess = sessions.get(sid)
+    if not sess:
+        return
+    table_id = data.get("table_id")
+    ready = bool(data.get("ready", True))
+    engine = lobby.get_table(table_id)
+    if not engine:
+        return
+    player = engine.players.get(sid)
+    if not player or getattr(player, "is_bot", False):
+        return
+    player.ready = ready
+    log(f"[set_ready] sid={sid}, ready={ready}, table={table_id}")
+    await _broadcast_table_state(table_id)
+    await _maybe_auto_start(table_id)
 
 
 @sio.on('table:action')
@@ -478,6 +531,36 @@ def _cancel_turn_timer(table_id: str):
     timer = turn_timers.pop(table_id, None)
     if timer and not timer.done():
         timer.cancel()
+
+
+def _destroy_table_if_no_humans(table_id: str):
+    """若该桌已无真人玩家,销毁该桌并清理所有计时器/记录。"""
+    engine = lobby.get_table(table_id)
+    if not engine:
+        return
+
+    # 检查是否还有非 bot 玩家
+    has_human = any(
+        not getattr(p, "is_bot", False)
+        for p in engine.players.values()
+    )
+    if has_human:
+        return
+
+    log(f"[destroy_table] table={table_id} has no humans, cleaning up")
+
+    # 取消所有该桌的计时器
+    _cancel_turn_timer(table_id)
+    _cancel_auto_start_timer(table_id)
+
+    # 清掉记录
+    hand_end_sent.pop(table_id, None)
+
+    # 从大厅移除
+    lobby.remove_table(table_id)
+
+    # 广播大厅更新
+    asyncio.create_task(_broadcast_lobby_update())
 
 
 async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT):
@@ -587,6 +670,25 @@ async def _broadcast_lobby_update():
     """广播大厅更新。"""
     tables = lobby.list_tables()
     await sio.emit("lobby:update", {"tables": tables})
+
+
+async def _maybe_auto_start(table_id: str):
+    """≥2 真人且全部真人已准备时,自动开局。1 真人场景不自动开(走手动按钮)。"""
+    engine = lobby.get_table(table_id)
+    if not engine or engine.hand_in_progress:
+        return
+    humans = [p for p in engine.players.values() if not getattr(p, "is_bot", False)]
+    if len(humans) < 2:
+        return  # 仅 1 真人:保留手动开始
+    if not all(getattr(p, "ready", False) for p in humans):
+        return  # 还有真人没准备
+    if not engine.can_start():
+        return
+    log(f"[auto_start] table={table_id}, humans={len(humans)} all ready, starting")
+    _cancel_auto_start_timer(table_id)
+    engine.start_hand()
+    await _broadcast_table_state(table_id)
+    await _run_bot_loop(table_id)
 
 
 async def _run_bot_loop(table_id: str):

@@ -16,6 +16,7 @@ import type {
 import { SocketIoTransport } from "./transport/socketIo";
 import { MockTransport } from "./transport/mock";
 import { getToken } from "./api";
+import { debugLog } from "./utils/debug";
 
 const MOCK = import.meta.env.VITE_MOCK === "1";
 
@@ -29,15 +30,21 @@ let connected = false;
 export function connectSocket(): void {
   if (connected) {
     console.log("[socket] connectSocket: already connected, skipping");
+    debugLog("[socket] connectSocket: already connected, skipping");
     return;
   }
   const token = getToken();
   if (!token && !MOCK) {
     console.warn("[socket] connectSocket: no token, skipping connection");
+    debugLog("[socket] connectSocket: no token, skipping connection");
     return;
   }
   console.log("[socket] connectSocket: initiating connection, MOCK:", MOCK);
+  debugLog(`[socket] connectSocket: initiating, MOCK=${MOCK}`);
   transport.connect(token ?? "mock");
+  debugLog(
+    `[socket] connect() called with token prefix=${(token ?? "").slice(0, 10)}`,
+  );
   connected = true;
 }
 

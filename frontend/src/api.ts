@@ -72,3 +72,27 @@ export function getLobby(): Promise<{ tables: LobbyTable[] }> {
     auth: true,
   });
 }
+
+/** POST /api/profile/avatar - 上传头像 */
+export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
+  const form = new FormData();
+  form.append("file", file);
+
+  const token = getToken();
+  const headers = new Headers();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const res = await fetch(`${API_BASE}/api/profile/avatar`, {
+    method: "POST",
+    headers,
+    body: form,
+  });
+
+  const body: unknown = await res.json().catch(() => null);
+
+  if (!res.ok) {
+    const err = (body as { error?: SocketError } | null)?.error;
+    throw new ApiError(err?.code ?? "UNKNOWN", err?.message ?? res.statusText);
+  }
+  return body as { avatar: string };
+}

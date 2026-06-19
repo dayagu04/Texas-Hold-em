@@ -6,12 +6,13 @@
  * 右上角：未登录显示[登录]按钮，已登录显示头像+用户名+退出。
  * 视觉：赌场暗金主题 + framer-motion 淡入淡出动效。
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../auth";
 import { zhCN } from "../i18n/zh-CN";
 import LoginModal from "./LoginModal";
+import * as api from "../api";
 import type { GameType } from "../types";
 import { MOTION } from "../theme/motion";
 
@@ -51,6 +52,17 @@ export default function GameSelection() {
   const { name, isAuthed, signOut } = useAuth();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(null);
+
+  // 加载头像
+  useEffect(() => {
+    if (isAuthed) {
+      api
+        .me()
+        .then((res) => setAvatar(res.avatar ?? null))
+        .catch(() => setAvatar(null));
+    }
+  }, [isAuthed]);
 
   const handleStartGame = () => {
     if (isAuthed) {
@@ -85,13 +97,27 @@ export default function GameSelection() {
           </h1>
           <div className="flex items-center gap-4">
             {isAuthed ? (
-              // 已登录：头像 + 用户名 + 退出
+              // 已登录：头像 + 用户名 + 个人中心 + 退出
               <div className="flex items-center gap-3">
-                {/* 头像（首字母圆形） */}
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
-                  {name?.[0]?.toUpperCase() ?? "?"}
-                </div>
+                {/* 头像 */}
+                {avatar ? (
+                  <img
+                    src={avatar}
+                    className="h-10 w-10 rounded-full object-cover border border-gold/30"
+                    alt={name ?? "头像"}
+                  />
+                ) : (
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gold text-base font-bold">
+                    {name?.[0]?.toUpperCase() ?? "?"}
+                  </div>
+                )}
                 <span className="text-text-hi">{name}</span>
+                <button
+                  onClick={() => navigate("/profile")}
+                  className="rounded-card border border-rim px-3 py-1 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+                >
+                  个人中心
+                </button>
                 <button
                   onClick={handleLogout}
                   className="rounded-card border border-rim px-3 py-1 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"

@@ -9,6 +9,7 @@ import { useParams } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
 import { useAuth } from "../auth";
 import { getSid, onStatus } from "../socket";
+import { debugLog } from "../utils/debug";
 import TableShell from "./TableShell";
 import TexasBoard from "./tables/TexasBoard";
 import BragBoard from "./tables/BragBoard";
@@ -18,7 +19,7 @@ import type { PrivateState, TableState } from "../types";
 
 export default function TablePage() {
   const { id = "" } = useParams();
-  const { subscribe } = useSocket();
+  const { subscribe, emit } = useSocket();
   const { name } = useAuth();
   const [state, setState] = useState<TableState | null>(null);
   const [priv, setPriv] = useState<PrivateState | null>(null);
@@ -26,13 +27,30 @@ export default function TablePage() {
   const [sid, setSid] = useState<string | null>(() => getSid());
 
   useEffect(() => {
-    const offState = subscribe("table:state", setState);
-    const offPriv = subscribe("table:private", setPriv);
+    const offState = subscribe("table:state", (s) => {
+      debugLog("[TablePage] table:state received", {
+        stage: s.stage,
+        current_turn: s.current_turn,
+        players_count: s.players.length,
+      });
+      setState(s);
+    });
+    const offPriv = subscribe("table:private", (p) => {
+      debugLog("[TablePage] table:private received", {
+        legal_actions: p.legal_actions?.map((a) => a.action),
+        hole_count: p.hole?.length,
+      });
+      setPriv(p);
+    });
+    // 挂载晚于后端创建桌子那次 table:state 广播会错过它,导致 state 永远为 null
+    // 卡在"加载中"。订阅完成后主动请求一次,后端会定向重推 table:state + table:private。
+    debugLog("[TablePage] emit table:sync", { table_id: id });
+    emit("table:sync", { table_id: id });
     return () => {
       offState();
       offPriv();
     };
-  }, [subscribe]);
+  }, [subscribe, emit, id]);
 
   // connect/reconnect 后 socket.id 会刷新,后端 connect 钩子会迁移
   // engine.players 里的 sid → 这里跟随 status 重取,保证 mySid 一致。

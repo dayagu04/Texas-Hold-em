@@ -5,7 +5,7 @@
 import type { ErrorCode, GameType } from "../types";
 
 export const zhCN = {
-  brand: "Card House",
+  brand: "牌屋",
   brandSub: "私享扑克房 · 仅限受邀名单",
 
   common: {
@@ -23,7 +23,7 @@ export const zhCN = {
   },
 
   login: {
-    title: "CARD HOUSE",
+    title: "牌屋",
     subtitle: "— 多人在线纸牌游戏 —",
     placeholder: "输入用户名",
     submit: "进入",
@@ -87,11 +87,19 @@ export const zhCN = {
     sidePot: "边池",
     currentBet: "当前注",
     levelCard: (lv: string) => `打 ${lv}`,
+    team: (t: string) => `队伍 ${t}`,
     leave: "退出",
     startHand: "开始新局",
     startGame: "开始游戏",
     starting: "开始中…",
     waitingHost: "等待房主开始",
+    ready: "准备",
+    cancelReady: "取消准备",
+    readyStatus: (ready: number, total: number) => `已准备 ${ready}/${total}`,
+    playerReady: "已准备",
+    playerNotReady: "未准备",
+    waitingReady: "等待所有玩家准备…",
+    currentHand: "当前牌型",
     needMorePlayers: (n: number) => `需至少 ${n} 人`,
     waitingStart: "等待开始",
     dealer: "庄家",

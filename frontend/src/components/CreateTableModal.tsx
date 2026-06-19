@@ -5,8 +5,10 @@
  * M2 骨架版：基础表单 + 发 lobby:create_table；UI 精修（卡片高亮 / 动画）在 M4。
  */
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
 import { useSocket } from "../hooks/useSocket";
+import { debugLog } from "../utils/debug";
 import type { BotLevel, CreateTablePayload, GameType } from "../types";
 
 interface Props {
@@ -23,6 +25,7 @@ const GAME_SEATS: Record<GameType, { min: number; max: number; default: number }
 
 export default function CreateTableModal({ onClose, onCreated, preselectedGame }: Props) {
   const { subscribe, emit } = useSocket();
+  const navigate = useNavigate();
   const [step, setStep] = useState(preselectedGame ? 2 : 1);
   const [gameType, setGameType] = useState<GameType | null>(preselectedGame || null);
   const [tableName, setTableName] = useState("");
@@ -45,11 +48,28 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
     // 不要加 if (isCreating) 守卫——闭包陷阱：后端响应极快时，事件可能被
     // isCreating=false 的旧闭包收到，守卫为 false 直接吞掉 → 永久卡"创建中"。
     // onCreated 内部 navigate 会卸载本组件，自动解绑监听，不会重复触发。
+    debugLog("[CreateTableModal] mount, subscribing to lobby:joined");
     const off = subscribe("lobby:joined", (data) => {
-      onCreated(data.table_id);
+      debugLog("[CreateTableModal] RECEIVED lobby:joined", data);
+      // 兜底跳转:即使父组件 onCreated 链路有问题(stale closure / prop 变更),
+      // 也能保证用户进入牌桌。父组件的 onCreated 仍会执行(关闭 modal 等副作用)。
+      try {
+        debugLog("[CreateTableModal] calling onCreated", { table_id: data.table_id });
+        onCreated(data.table_id);
+        debugLog("[CreateTableModal] onCreated returned");
+      } catch (e) {
+        debugLog("[CreateTableModal] onCreated threw", { error: String(e) });
+      }
+      // 兜底:直接 navigate(替代 onCreated 内部的 navigate)
+      debugLog("[CreateTableModal] fallback navigate", { table_id: data.table_id });
+      navigate(`/table/${data.table_id}`);
     });
-    return off;
-  }, [subscribe, onCreated]);
+    debugLog("[CreateTableModal] subscribed");
+    return () => {
+      debugLog("[CreateTableModal] unmount, unsubscribing");
+      off();
+    };
+  }, [subscribe, onCreated, navigate]);
 
   const handleGameSelect = (g: GameType) => {
     setGameType(g);
@@ -81,6 +101,7 @@ export default function CreateTableModal({ onClose, onCreated, preselectedGame }
     payload.game_mode = gameMode;
     if (gameMode === "limited") payload.max_hands = maxHands;
 
+    debugLog("[CreateTableModal] emitting lobby:create_table", payload);
     setIsCreating(true);
     emit("lobby:create_table", payload);
   };
