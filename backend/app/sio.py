@@ -246,13 +246,17 @@ async def lobby_create_table(sid, data):
     sess["table_id"] = table_id
     await sio.enter_room(sid, table_id)
 
-    # 添加 Bot
+    # 添加 Bot：逐个隔离，单个 bot 配置错误（座位重复 / 掼蛋超 4 人等）
+    # 不得阻断房主入座与 lobby:joined，否则前端永久卡"创建中"。
     for bot_spec in bots:
         bot_seat = bot_spec.get("seat")
         bot_level = bot_spec.get("level", "easy")
         bot_sid = f"bot_{table_id}_{bot_seat}"
         bot_name = f"Bot-{bot_level[:1].upper()}{bot_seat}"
-        engine.add_player(bot_sid, bot_name, bot_seat, is_bot=True, bot_level=bot_level)
+        try:
+            engine.add_player(bot_sid, bot_name, bot_seat, is_bot=True, bot_level=bot_level)
+        except (ValueError, NotImplementedError) as e:
+            print(f"[WARN create_table] skip bot seat={bot_seat}: {e}")
 
     _sid_rooms = [r for r, members in sio.manager.rooms.get('/', {}).items() if sid in members]
     print(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in sessions}")
