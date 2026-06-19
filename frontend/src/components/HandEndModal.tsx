@@ -64,17 +64,17 @@ export default function HandEndModal({
         transition={{ duration: 0.2 }}
       >
         <motion.div
-          className="w-full max-w-2xl rounded-panel border-2 border-gold bg-elev shadow-2xl"
+          className="w-full max-w-xl rounded-panel border-2 border-gold bg-elev shadow-2xl"
           initial={{ opacity: 0, scale: 0.95, y: 12 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 12 }}
           transition={{ duration: 0.2 }}
         >
-          <header className="border-b border-rim/50 px-6 py-4 text-center">
+          <header className="border-b border-rim/50 px-4 py-3 text-center">
             <h2 className="text-xl font-bold text-gold">🏆 一局结束</h2>
           </header>
 
-          <div className="max-h-[60vh] space-y-3 overflow-y-auto p-6">
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto p-4">
             {ranked.map((r) => {
               const isWinner = r.amount > 0;
               return (
@@ -101,7 +101,7 @@ export default function HandEndModal({
                     {r.cards && r.cards.length > 0 && (
                       <div className="flex gap-1">
                         {r.cards.map((c, i) => (
-                          <CardSprite key={i} card={c} className="h-14 w-10" />
+                          <CardSprite key={i} card={c} className="h-12 w-9" />
                         ))}
                       </div>
                     )}
@@ -124,7 +124,7 @@ export default function HandEndModal({
             ))}
           </div>
 
-          <footer className="flex items-center justify-between border-t border-rim/50 px-6 py-4">
+          <footer className="flex items-center justify-between border-t border-rim/50 px-4 py-3">
             <span
               className={`text-sm ${
                 willAutoStart && remaining < 2 ? "text-danger" : "text-text-lo"

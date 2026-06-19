@@ -71,6 +71,14 @@ export const zhCN = {
     previewBots: (n: number) => `AI ${n} 个`,
     previewComposition: (real: number, ai: number, empty: number) =>
       `${real} 真人（你）+ ${ai} 个 AI + ${empty} 个空位`,
+    gameMode: {
+      single: "单局模式",
+      singleDesc: "打完一局后手动开下一局",
+      continuous: "连续模式",
+      continuousDesc: "自动开下一局,直到人数不足",
+      limited: "限定局数",
+      rounds: "局",
+    },
   },
 
   table: {

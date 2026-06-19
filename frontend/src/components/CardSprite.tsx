@@ -59,9 +59,14 @@ export default function CardSprite({ card, dim, animate, className = "" }: Props
   }
 
   const rankLabel =
-    RANK_LABEL[card.rank] ?? (card.rank >= 2 && card.rank <= 10 ? String(card.rank) : "?");
-  const suitKey = card.suit.toLowerCase();
-  const suitSymbol = SUIT_SYMBOL[suitKey] ?? "?";
+    RANK_LABEL[card.rank] ??
+    (card.rank >= 2 && card.rank <= 10
+      ? String(card.rank)
+      : card.rank === 1
+        ? "A"
+        : "?");
+  const suitKey = (card.suit || "").toLowerCase();
+  const suitSymbol = SUIT_SYMBOL[suitKey] ?? "🂠";
   const suitColor = SUIT_COLOR[suitKey] ?? "text-text-lo";
 
   return (
