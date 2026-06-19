@@ -111,7 +111,7 @@ export default function ProfilePage() {
               {currentAvatar ? (
                 <img
                   src={currentAvatar}
-                  className="h-24 w-24 rounded-full object-cover border-2 border-gold/30"
+                  className="h-24 w-24 rounded-full object-cover object-top border-2 border-gold/30"
                   alt={name ?? "头像"}
                 />
               ) : (

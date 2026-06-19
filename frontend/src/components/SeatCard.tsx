@@ -81,7 +81,7 @@ export default function SeatCard({
             <img
               src={player.avatar}
               alt={player.name}
-              className={`h-12 w-12 rounded-full object-cover ${
+              className={`h-10 w-10 rounded-full object-cover object-top ${
                 isMe
                   ? "border-2 border-gold/70 shadow-[0_0_18px_rgba(201,161,74,0.6)]"
                   : "border-2 border-rim/60 shadow-[0_2px_6px_rgba(0,0,0,0.5)]"
@@ -89,7 +89,7 @@ export default function SeatCard({
             />
           ) : (
             <div
-              className={`flex h-12 w-12 items-center justify-center rounded-full ${
+              className={`flex h-10 w-10 items-center justify-center rounded-full ${
                 isMe
                   ? "border-2 border-gold/70 bg-gold text-base shadow-[0_0_18px_rgba(201,161,74,0.6)]"
                   : "border-2 border-rim/60 bg-gradient-to-br from-rim/80 to-base/90 text-text-lo shadow-[0_2px_6px_rgba(0,0,0,0.5)]"

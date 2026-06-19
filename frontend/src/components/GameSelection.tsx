@@ -103,7 +103,7 @@ export default function GameSelection() {
                 {avatar ? (
                   <img
                     src={avatar}
-                    className="h-10 w-10 rounded-full object-cover border border-gold/30"
+                    className="h-10 w-10 rounded-full object-cover object-top border border-gold/30"
                     alt={name ?? "头像"}
                   />
                 ) : (
