@@ -138,6 +138,7 @@ export interface MeResponse {
   expires_at: string;
   avatar?: string | null;
   points?: number; // 个人积分（后端 v2 新增）
+  is_admin?: boolean; // 是否管理员（#008 白名单管理）
 }
 
 /* ---- 个人中心：积分统计（GET /api/profile/stats）---- */
@@ -177,4 +178,13 @@ export interface HandHistory {
   board: string;
   me: HandHistoryMe;
   players: HandHistoryPlayer[];
+}
+
+/* ---- 白名单管理（GET /api/admin/whitelist）---- */
+export interface WhitelistUser {
+  name: string;
+  allowed: boolean;
+  is_admin: boolean;
+  created_at: string | null;
+  points: number;
 }

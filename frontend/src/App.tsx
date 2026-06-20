@@ -5,6 +5,7 @@ import GameSelection from "./components/GameSelection";
 import Lobby from "./components/Lobby";
 import TablePage from "./components/TablePage";
 import ProfilePage from "./components/ProfilePage";
+import WhitelistAdminPage from "./components/WhitelistAdminPage";
 import ErrorBoundary from "./components/ErrorBoundary";
 import type { ReactNode } from "react";
 
@@ -35,6 +36,14 @@ export default function App() {
             element={
               <RequireAuth>
                 <ProfilePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/admin/whitelist"
+            element={
+              <RequireAuth>
+                <WhitelistAdminPage />
               </RequireAuth>
             }
           />

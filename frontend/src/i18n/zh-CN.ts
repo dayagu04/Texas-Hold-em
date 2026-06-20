@@ -163,6 +163,22 @@ export const zhCN = {
     brag: "炸金花",
   } satisfies Record<GameType, string>,
 
+  admin: {
+    whitelist: "白名单管理",
+    whitelistEntry: "白名单",
+    addUser: "添加用户",
+    removeUser: "移除",
+    usernamePlaceholder: "输入用户名…",
+    setAsAdmin: "同时设为管理员",
+    cannotRemoveSelf: "不能移除自己",
+    confirmRemove: (name: string) => `确认移除「${name}」？移除后该用户将无法登录。`,
+    added: (name: string) => `已添加「${name}」`,
+    removed: (name: string) => `已移除「${name}」`,
+    isAdmin: "管理员",
+    notAdmin: "普通用户",
+    self: "（你）",
+  },
+
   errors: {
     AUTH_REQUIRED: "需要登录",
     NOT_ALLOWED: "用户不在白名单",

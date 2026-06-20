@@ -61,12 +61,16 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [history, setHistory] = useState<HandHistory[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     // 头像 + 积分（me 也带 points，但 stats 更全）
     api
       .me()
-      .then((res) => setAvatar(res.avatar ?? null))
+      .then((res) => {
+        setAvatar(res.avatar ?? null);
+        setIsAdmin(res.is_admin ?? false);
+      })
       .catch(() => setAvatar(null));
 
     api
@@ -217,6 +221,24 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
+
+        {/* 白名单管理入口（仅 admin） */}
+        {isAdmin && (
+          <div className="rounded-panel border border-gold/30 bg-elev p-6 shadow-card">
+            <h3 className="mb-3 text-lg font-bold text-text-hi">
+              {zhCN.admin.whitelist}
+            </h3>
+            <p className="mb-4 text-sm text-text-lo">
+              管理可登录用户和管理员权限
+            </p>
+            <button
+              onClick={() => navigate("/admin/whitelist")}
+              className="rounded-card border border-gold/50 px-4 py-2 text-sm text-gold transition hover:bg-gold/10"
+            >
+              进入管理页面 →
+            </button>
+          </div>
+        )}
 
         {/* 对局历史 */}
         <div className="rounded-panel border border-gold/30 bg-elev p-6 shadow-card">

@@ -9,6 +9,7 @@ import type {
   MeResponse,
   ProfileStats,
   SocketError,
+  WhitelistUser,
 } from "./types";
 
 /** 后端地址。空字符串 → 同源 / vite proxy（开发默认）。 */
@@ -119,4 +120,32 @@ export async function uploadAvatar(file: File): Promise<{ avatar: string }> {
     throw new ApiError(err?.code ?? "UNKNOWN", err?.message ?? res.statusText);
   }
   return body as { avatar: string };
+}
+
+/** GET /api/admin/whitelist - 获取白名单列表（仅 admin） */
+export function getWhitelist(): Promise<{ users: WhitelistUser[] }> {
+  return request<{ users: WhitelistUser[] }>("/api/admin/whitelist", {
+    method: "GET",
+    auth: true,
+  });
+}
+
+/** POST /api/admin/whitelist - 添加用户到白名单（仅 admin） */
+export function addToWhitelist(
+  name: string,
+  isAdmin = false,
+): Promise<{ user: WhitelistUser }> {
+  return request<{ user: WhitelistUser }>("/api/admin/whitelist", {
+    method: "POST",
+    auth: true,
+    body: JSON.stringify({ name, is_admin: isAdmin }),
+  });
+}
+
+/** DELETE /api/admin/whitelist/{name} - 从白名单移除用户（仅 admin） */
+export function removeFromWhitelist(name: string): Promise<{ removed: string }> {
+  return request<{ removed: string }>(`/api/admin/whitelist/${name}`, {
+    method: "DELETE",
+    auth: true,
+  });
 }
