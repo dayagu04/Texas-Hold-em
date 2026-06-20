@@ -20,6 +20,16 @@ const MIN_PLAYERS: Record<GameType, number> = {
   guandan: 4,
 };
 
+/** 格式化聊天时间戳（毫秒 → HH:mm），兼容空/0 */
+function formatChatTime(ts: string | number): string {
+  const msNum = typeof ts === "string" ? parseInt(ts, 10) : ts;
+  if (!msNum || msNum === 0) return "";
+  const d = new Date(msNum);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 interface Props {
   tableId: string;
   handId: string;
@@ -153,6 +163,10 @@ export default function TableShell({
     setChatText("");
   };
 
+  const handleQuickMessage = (msg: string) => {
+    emit("table:chat", { table_id: tableId, text: msg });
+  };
+
   const handleAction = (action: string, payload: unknown = {}) => {
     emit("table:action", { table_id: tableId, action, payload });
   };
@@ -276,12 +290,31 @@ export default function TableShell({
               ) : (
                 chatMessages.map((m, i) => (
                   <div key={i} className="mb-2">
-                    <span className="font-medium text-gold">{m.name}</span>
-                    <span className="ml-1 text-text-hi">{m.text}</span>
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-medium text-gold">{m.name}</span>
+                      {m.ts && (
+                        <span className="text-[10px] text-text-lo/70">
+                          {formatChatTime(m.ts)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-text-hi">{m.text}</div>
                   </div>
                 ))
               )}
               <div ref={chatEndRef} />
+            </div>
+            {/* 快捷消息按钮 */}
+            <div className="mb-2 flex flex-wrap gap-1">
+              {zhCN.table.quickMessages.map((msg) => (
+                <button
+                  key={msg}
+                  onClick={() => handleQuickMessage(msg)}
+                  className="rounded border border-rim/50 px-2 py-0.5 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi"
+                >
+                  {msg}
+                </button>
+              ))}
             </div>
             <div className="flex gap-2">
               <input

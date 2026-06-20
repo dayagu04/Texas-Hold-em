@@ -124,7 +124,7 @@ export interface ChatMessage {
   sid: string;
   name: string;
   text: string;
-  ts: string;
+  ts: string | number; // #010: 改为毫秒数(number)，兼容旧空串
 }
 
 /* ---- REST：登录 / 当前用户（API-CONTRACT §1.2 / §1.3）---- */

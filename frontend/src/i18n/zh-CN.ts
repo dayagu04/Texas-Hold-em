@@ -109,6 +109,7 @@ export const zhCN = {
     chat: "聊天",
     chatPlaceholder: "说点什么…",
     timeout: (s: number) => `${s}s`,
+    quickMessages: ["加注?", "跟!", "弃了", "好牌!", "稳住", "梭哈?", "👍", "😏"],
   },
 
   actions: {
