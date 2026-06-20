@@ -236,7 +236,26 @@ def leaderboard(metric: str = "points", limit: int = 10, username: str = Depends
     return {"metric": metric, "entries": entries}
 
 
-@app.post("/api/lobby/cleanup")
+@app.get("/api/hand/{hand_id}/replay")
+def hand_replay(hand_id: int, username: str = Depends(get_current_user)):
+    """返回某局完整回放数据（#013，契约 §1.8 ReplayData）。
+
+    - 仅该局参与者可看（查 hand_players），否则 403 FORBIDDEN。
+    - 对局不存在 → 404 HAND_NOT_FOUND。
+    - 老局无 action 记录 → actions:[]（不报 404）。
+    """
+    replay = db.get_replay(hand_id)
+    if replay is None:
+        raise HTTPException(status_code=404, detail={
+            "error": {"code": "HAND_NOT_FOUND", "message": "对局不存在"}
+        })
+    # 鉴权：仅参与者可看
+    if not db.hand_has_player(hand_id, username):
+        raise HTTPException(status_code=403, detail={
+            "error": {"code": "FORBIDDEN", "message": "无权查看该局回放"}
+        })
+    return replay
+
 async def cleanup_lobby(username: str = Depends(get_current_admin)):
     """清理无真人在座的房间（死局回收）。需要管理员权限。
 
