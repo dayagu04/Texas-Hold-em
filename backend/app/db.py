@@ -7,12 +7,14 @@
 - 存储紧凑：卡牌用 2 字符 code 串（"8d3s"），筹码/积分用整数，每局只记一条
   摘要（hands）+ 每人一条（hand_players），不记录逐 action。
 
-并发策略：本项目为单进程异步服务，写入量极低（每局一次）。为简单且线程安全，
-每次操作开短连接并 close。WAL 模式下读写并发安全。所有写入用一把进程级锁串行化，
-避免极端并发下的 "database is locked"。
+并发策略：本项目为单进程异步服务，写入量极低（每局一次）。使用 thread-local
+持久连接减少连接开销（对局结束广播时不再频繁开关连接）。WAL 模式下读写并发安全。
+所有写入用一把进程级锁串行化 + _txn() 上下文管理器（提交/回滚），避免极端并发下的
+"database is locked" 与异常时遗留未提交事务。
 """
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,16 +23,38 @@ DB_PATH = Path(__file__).parent.parent / "poker.db"
 # 写串行化锁（读不加锁，WAL 下并发读安全）
 _write_lock = threading.Lock()
 
+# Thread-local 持久连接
+_local = threading.local()
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
 def _connect() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    """获取当前线程的持久连接，首次访问时创建。读操作直接用，不关闭。"""
+    conn = getattr(_local, "conn", None)
+    if conn is None:
+        conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        _local.conn = conn
     return conn
+
+
+@contextmanager
+def _txn():
+    """写事务上下文：成功 commit，异常 rollback 后重新抛出。连接保持持久不关闭。
+
+    调用方需自行持有 _write_lock。
+    """
+    conn = _connect()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
 
 
 SCHEMA = """
@@ -77,8 +101,7 @@ CREATE INDEX IF NOT EXISTS idx_hp_name ON hand_players(name);
 def init_db():
     """连接 + 建表 + 启用 WAL。main.py 启动时调用一次。"""
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(SCHEMA)
             # 旧库 ALTER 兜底：加 allowed / is_admin 列
@@ -90,9 +113,6 @@ def init_db():
                 conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
             except sqlite3.OperationalError:
                 pass
-            conn.commit()
-        finally:
-            conn.close()
     _migrate_json_once()
     _migrate_whitelist_once()
 
@@ -139,8 +159,6 @@ def _migrate_whitelist_once():
     except sqlite3.OperationalError:
         # meta 表可能还不存在（老数据库），创建后再试
         pass
-    finally:
-        conn.close()
 
     try:
         import json
@@ -153,8 +171,7 @@ def _migrate_whitelist_once():
         return
 
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             for i, name in enumerate(names):
                 name = name.strip()
                 if not name:
@@ -172,9 +189,6 @@ def _migrate_whitelist_once():
                     conn.execute("UPDATE users SET allowed = 1 WHERE name = ?", (name,))
             # 写迁移标记
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("whitelist_migrated", "1"))
-            conn.commit()
-        finally:
-            conn.close()
 
 
 
@@ -186,58 +200,45 @@ def get_or_create_user(name: str) -> dict:
     if row is not None:
         return row
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             conn.execute(
                 "INSERT OR IGNORE INTO users (name, points, created_at) VALUES (?, ?, ?)",
                 (name, 1000, _now()),
             )
-            conn.commit()
-        finally:
-            conn.close()
     return get_user(name)
 
 
 def get_user(name: str) -> dict | None:
     conn = _connect()
-    try:
-        row = conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
+    row = conn.execute("SELECT * FROM users WHERE name = ?", (name,)).fetchone()
+    return dict(row) if row else None
 
 
 def set_avatar(name: str, path: str) -> int:
     """更新头像裸路径，avatar_version += 1，返回新 version。"""
     get_or_create_user(name)
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             conn.execute(
                 "UPDATE users SET avatar = ?, avatar_version = avatar_version + 1 WHERE name = ?",
                 (path, name),
             )
-            conn.commit()
             row = conn.execute(
                 "SELECT avatar_version FROM users WHERE name = ?", (name,)
             ).fetchone()
             return row["avatar_version"] if row else 0
-        finally:
-            conn.close()
 
 
 def get_avatar(name: str) -> tuple[str | None, int]:
     """返回 (裸路径或None, version)。"""
     conn = _connect()
-    try:
-        row = conn.execute(
-            "SELECT avatar, avatar_version FROM users WHERE name = ?", (name,)
-        ).fetchone()
-        if not row:
-            return None, 0
-        return row["avatar"], row["avatar_version"]
-    finally:
-        conn.close()
+    row = conn.execute(
+        "SELECT avatar, avatar_version FROM users WHERE name = ?", (name,)
+    ).fetchone()
+    if not row:
+        return None, 0
+    return row["avatar"], row["avatar_version"]
+
 
 
 # ---- 白名单管理 ----
@@ -257,13 +258,10 @@ def is_admin(name: str) -> bool:
 def list_whitelist() -> list[dict]:
     """返回所有白名单用户（allowed=1），含 name/allowed/is_admin/created_at/points。"""
     conn = _connect()
-    try:
-        rows = conn.execute(
-            "SELECT name, allowed, is_admin, created_at, points FROM users WHERE allowed = 1"
-        ).fetchall()
-        return [dict(r) for r in rows]
-    finally:
-        conn.close()
+    rows = conn.execute(
+        "SELECT name, allowed, is_admin, created_at, points FROM users WHERE allowed = 1"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def set_allowed(name: str, allowed: bool, is_admin: bool | None = None) -> dict:
@@ -272,8 +270,7 @@ def set_allowed(name: str, allowed: bool, is_admin: bool | None = None) -> dict:
     if not name:
         raise ValueError("name 不能为空")
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             # upsert 用户
             conn.execute(
                 "INSERT OR IGNORE INTO users (name, points, created_at, allowed, is_admin) "
@@ -285,10 +282,8 @@ def set_allowed(name: str, allowed: bool, is_admin: bool | None = None) -> dict:
             # 可选地更新 is_admin
             if is_admin is not None:
                 conn.execute("UPDATE users SET is_admin = ? WHERE name = ?", (1 if is_admin else 0, name))
-            conn.commit()
-        finally:
-            conn.close()
     return get_user(name)
+
 
 
 # ---- 对局 ----
@@ -301,8 +296,7 @@ def record_hand(table_id: str, game_type: str, pot: int, board: str,
     返回写入的 hand_id。整局用单次事务包裹。
     """
     with _write_lock:
-        conn = _connect()
-        try:
+        with _txn() as conn:
             cur = conn.execute(
                 "INSERT INTO hands (table_id, game_type, ended_at, pot, board) "
                 "VALUES (?, ?, ?, ?, ?)",
@@ -340,10 +334,7 @@ def record_hand(table_id: str, game_type: str, pot: int, board: str,
                     "hands_won = hands_won + ?, total_net = total_net + ? WHERE name = ?",
                     (net, won, net, p["name"]),
                 )
-            conn.commit()
             return hand_id
-        finally:
-            conn.close()
 
 
 def get_stats(name: str) -> dict:
@@ -362,58 +353,55 @@ def get_history(name: str, limit: int = 20) -> list[dict]:
     if limit < 1:
         limit = 1
     conn = _connect()
-    try:
-        # 先取该用户参与的最近 N 局 hand_id（按结束时间倒序）
-        hand_rows = conn.execute(
-            "SELECT h.id, h.game_type, h.ended_at, h.pot, h.board "
-            "FROM hands h JOIN hand_players hp ON hp.hand_id = h.id "
-            "WHERE hp.name = ? ORDER BY h.ended_at DESC, h.id DESC LIMIT ?",
-            (name, limit),
-        ).fetchall()
-        if not hand_rows:
-            return []
+    # 先取该用户参与的最近 N 局 hand_id（按结束时间倒序）
+    hand_rows = conn.execute(
+        "SELECT h.id, h.game_type, h.ended_at, h.pot, h.board "
+        "FROM hands h JOIN hand_players hp ON hp.hand_id = h.id "
+        "WHERE hp.name = ? ORDER BY h.ended_at DESC, h.id DESC LIMIT ?",
+        (name, limit),
+    ).fetchall()
+    if not hand_rows:
+        return []
 
-        hand_ids = [r["id"] for r in hand_rows]
-        placeholders = ",".join("?" * len(hand_ids))
-        player_rows = conn.execute(
-            f"SELECT hand_id, name, seat, is_bot, hole, total_bet, net, result "
-            f"FROM hand_players WHERE hand_id IN ({placeholders}) ORDER BY seat",
-            hand_ids,
-        ).fetchall()
+    hand_ids = [r["id"] for r in hand_rows]
+    placeholders = ",".join("?" * len(hand_ids))
+    player_rows = conn.execute(
+        f"SELECT hand_id, name, seat, is_bot, hole, total_bet, net, result "
+        f"FROM hand_players WHERE hand_id IN ({placeholders}) ORDER BY seat",
+        hand_ids,
+    ).fetchall()
 
-        by_hand: dict[int, list[dict]] = {}
-        for pr in player_rows:
-            by_hand.setdefault(pr["hand_id"], []).append({
-                "name": pr["name"],
-                "seat": pr["seat"],
-                "is_bot": bool(pr["is_bot"]),
-                "hole": pr["hole"],
-                "total_bet": pr["total_bet"],
-                "net": pr["net"],
-                "result": pr["result"],
-            })
+    by_hand: dict[int, list[dict]] = {}
+    for pr in player_rows:
+        by_hand.setdefault(pr["hand_id"], []).append({
+            "name": pr["name"],
+            "seat": pr["seat"],
+            "is_bot": bool(pr["is_bot"]),
+            "hole": pr["hole"],
+            "total_bet": pr["total_bet"],
+            "net": pr["net"],
+            "result": pr["result"],
+        })
 
-        history = []
-        for hr in hand_rows:
-            all_players = by_hand.get(hr["id"], [])
-            me = next((pl for pl in all_players if pl["name"] == name), None)
-            history.append({
-                "hand_id": hr["id"],
-                "game_type": hr["game_type"],
-                "ended_at": hr["ended_at"],
-                "pot": hr["pot"],
-                "board": hr["board"],
-                "me": {
-                    "hole": me["hole"] if me else "",
-                    "total_bet": me["total_bet"] if me else 0,
-                    "net": me["net"] if me else 0,
-                    "result": me["result"] if me else None,
-                },
-                "players": all_players,
-            })
-        return history
-    finally:
-        conn.close()
+    history = []
+    for hr in hand_rows:
+        all_players = by_hand.get(hr["id"], [])
+        me = next((pl for pl in all_players if pl["name"] == name), None)
+        history.append({
+            "hand_id": hr["id"],
+            "game_type": hr["game_type"],
+            "ended_at": hr["ended_at"],
+            "pot": hr["pot"],
+            "board": hr["board"],
+            "me": {
+                "hole": me["hole"] if me else "",
+                "total_bet": me["total_bet"] if me else 0,
+                "net": me["net"] if me else 0,
+                "result": me["result"] if me else None,
+            },
+            "players": all_players,
+        })
+    return history
 
 
 # ---- 积分榜 ----
@@ -432,39 +420,36 @@ def get_leaderboard(metric: str = "points", limit: int = 10) -> list[dict]:
     limit = max(1, min(limit, 50))
 
     conn = _connect()
-    try:
-        if metric == "points":
-            order_by = "points DESC"
-            where = ""
-        elif metric == "net":
-            order_by = "total_net DESC"
-            where = ""
-        else:  # winrate
-            order_by = "(CAST(hands_won AS REAL) / hands_played) DESC"
-            where = "WHERE hands_played >= 10"
+    if metric == "points":
+        order_by = "points DESC"
+        where = ""
+    elif metric == "net":
+        order_by = "total_net DESC"
+        where = ""
+    else:  # winrate
+        order_by = "(CAST(hands_won AS REAL) / hands_played) DESC"
+        where = "WHERE hands_played >= 10"
 
-        query = f"""
-            SELECT name, avatar, points, hands_played, hands_won, total_net
-            FROM users
-            {where}
-            ORDER BY {order_by}
-            LIMIT ?
-        """
-        rows = conn.execute(query, (limit,)).fetchall()
+    query = f"""
+        SELECT name, avatar, points, hands_played, hands_won, total_net
+        FROM users
+        {where}
+        ORDER BY {order_by}
+        LIMIT ?
+    """
+    rows = conn.execute(query, (limit,)).fetchall()
 
-        entries = []
-        for i, r in enumerate(rows, start=1):
-            winrate = round(r["hands_won"] / r["hands_played"], 2) if r["hands_played"] > 0 else 0.0
-            entries.append({
-                "rank": i,
-                "name": r["name"],
-                "avatar": r["avatar"],
-                "points": r["points"],
-                "hands_played": r["hands_played"],
-                "hands_won": r["hands_won"],
-                "total_net": r["total_net"],
-                "winrate": winrate,
-            })
-        return entries
-    finally:
-        conn.close()
+    entries = []
+    for i, r in enumerate(rows, start=1):
+        winrate = round(r["hands_won"] / r["hands_played"], 2) if r["hands_played"] > 0 else 0.0
+        entries.append({
+            "rank": i,
+            "name": r["name"],
+            "avatar": r["avatar"],
+            "points": r["points"],
+            "hands_played": r["hands_played"],
+            "hands_won": r["hands_won"],
+            "total_net": r["total_net"],
+            "winrate": winrate,
+        })
+    return entries
