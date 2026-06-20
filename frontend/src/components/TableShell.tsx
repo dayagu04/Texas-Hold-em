@@ -342,9 +342,9 @@ export default function TableShell({
       </div>
 
       {/* 右下浮动聊天窗（收起=圆形按钮 + 未读红点;展开=半透明小窗） */}
-      <div className="fixed bottom-28 right-4 z-40 flex flex-col items-end">
+      <div className="fixed bottom-16 right-2 z-40 flex flex-col items-end md:bottom-28 md:right-4">
         {chatOpen && (
-          <div className="mb-2 w-72 rounded-panel border border-gold/30 bg-base/85 p-3 shadow-elev backdrop-blur-md">
+          <div className="mb-2 w-72 rounded-panel border border-gold/30 bg-base/85 p-3 shadow-elev backdrop-blur-md md:w-80">
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-medium text-text-hi">
                 {zhCN.table.chat}
@@ -357,7 +357,7 @@ export default function TableShell({
                 ✕
               </button>
             </div>
-            <div className="mb-3 h-56 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs">
+            <div className="mb-3 h-48 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs md:h-56">
               {chatMessages.length === 0 ? (
                 <p className="text-text-lo/50">暂无消息</p>
               ) : (
@@ -383,7 +383,7 @@ export default function TableShell({
                 <button
                   key={msg}
                   onClick={() => handleQuickMessage(msg)}
-                  className="rounded border border-rim/50 px-2 py-0.5 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi"
+                  className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi active:bg-gold/10"
                 >
                   {msg}
                 </button>
@@ -396,11 +396,11 @@ export default function TableShell({
                 onChange={(e) => setChatText(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleChat()}
                 placeholder={zhCN.table.chatPlaceholder}
-                className="flex-1 rounded-card border border-rim bg-base px-2 py-1 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none"
+                className="flex-1 rounded-card border border-rim bg-base px-2 py-1.5 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none md:py-1"
               />
               <button
                 onClick={handleChat}
-                className="rounded-card bg-gold px-3 text-sm font-bold text-base transition hover:bg-gold-soft"
+                className="rounded-card bg-gold px-3 py-1.5 text-sm font-bold text-base transition hover:bg-gold-soft active:bg-gold-soft md:py-1"
               >
                 ↑
               </button>
@@ -413,7 +413,7 @@ export default function TableShell({
             setReadCount(chatMessages.length);
             setChatOpen((v) => !v);
           }}
-          className="relative flex h-12 w-12 items-center justify-center rounded-full border border-gold/40 bg-base/90 text-xl shadow-elev backdrop-blur-md transition hover:border-gold/70"
+          className="relative flex h-11 w-11 items-center justify-center rounded-full border border-gold/40 bg-base/90 text-xl shadow-elev backdrop-blur-md transition hover:border-gold/70 active:scale-95 md:h-12 md:w-12"
           aria-label={chatOpen ? "收起聊天" : "打开聊天"}
         >
           💬
