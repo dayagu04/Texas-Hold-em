@@ -178,7 +178,6 @@
 ## 7. 参考文档
 
 - [docs/features/001-game-selection.md](./001-game-selection.md) - 游戏选择主页原始需求
-- [docs/internal/frontend-reconnect-fix.md](../internal/frontend-reconnect-fix.md) - 连接卡住修复记录
 - [docs/design/API-CONTRACT.md](../design/API-CONTRACT.md) - 登录契约
 
 ---

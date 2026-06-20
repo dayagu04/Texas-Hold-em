@@ -12,8 +12,10 @@
 | 4 | [API-CONTRACT.md](../design/API-CONTRACT.md) | **前后端共同遵守** | REST + Socket.IO 事件契约 |
 | 5 | [UI-DESIGN.md](../design/UI-DESIGN.md) | 前端 / 设计 | 视觉规范、页面与组件 |
 | 6 | [AI-BOTS.md](../design/AI-BOTS.md) | 后端 | 人机插件接口与各玩法策略 |
-| 7 | [HANDOFF.md](./HANDOFF.md) | 两个 agent | 每个 agent 的任务清单与验收标准 |
-| 8 | [PM-HANDOFF.md](./PM-HANDOFF.md) | PM agent | PM 角色定义、工作流、文档地图 |
+| 7 | [QUICK-START.md](./QUICK-START.md) | 新 agent | 本地起服务、常见问题 |
+| 8 | [DEPLOYMENT.md](./DEPLOYMENT.md) | 运维 / 部署 | 本地 + Docker 部署、环境变量 |
+| 9 | [HANDOFF.md](./HANDOFF.md) | 两个 agent | 任务交接与验收（历史里程碑） |
+| 10 | [PM-HANDOFF.md](./PM-HANDOFF.md) | PM agent | PM 角色定义、工作流、文档地图 |
 
 ## 阅读路径
 
@@ -42,9 +44,13 @@
 - Vite 开发代理目标后端 `8000` 端口（见 [frontend/vite.config.ts](../../frontend/vite.config.ts)）。
 - 视觉风格：赌场暗金。
 
-### 还没做（见 features/ 与 roadmap）
+### 已交付（M1~M5 + #008~#014，全部已 push origin/main）
 
-白名单入库+管理后台（#008）、邀请/快速匹配（#009）、摊牌看对手牌+聊天打磨（#010）、积分榜（#011）、移动端+音效（#012）、牌局回放（#013，需新增 `hand_actions` 表）。
+白名单入库+管理后台（#008）、邀请/快速匹配（#009）、摊牌看对手牌+聊天打磨（#010）、积分榜（#011）、移动端+音效（#012）、牌局回放（#013，含 `hand_actions` 表）、摊牌最佳5张+聊天不遮挡（#014）。后端 `sio.py` 已拆为 `sio/` 包。
+
+### 规划中
+
+牌桌 UI 真实化重构（#015，对标欢乐斗地主，分 A/B/C 阶段）。其余下批需求待 PM 规划，见 `docs/internal/roadmap-2026Q3.md`（本地不入库）。
 
 ## 命名约定
 

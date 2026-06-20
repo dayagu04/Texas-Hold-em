@@ -43,7 +43,7 @@ cd frontend
 npm run dev
 ```
 
-**访问地址**: http://localhost:5173 (或端口被占时的 5174、5175)
+**访问地址**: http://localhost:5166 (或端口被占时的 5167、5168)
 
 ---
 
@@ -98,7 +98,7 @@ cd frontend && npm run dev
 
 ### 步骤 2: 浏览器测试
 
-1. 打开 http://localhost:5173
+1. 打开 http://localhost:5166
 2. 登录（输入白名单中的用户名，如 `Alice`）
 3. 选择"德州扑克" → 点"开始游戏"
 4. 配置房间参数 → 添加 3 个 bot → 创建房间
@@ -169,15 +169,15 @@ uvicorn app.main:sio_app --reload
 1. 查看后端控制台是否有 `[hand_end]` 日志
 2. 如果无日志，检查是否在正确的分支（应包含契约修复）
 
-### 问题 5: 测试通过 22 条
+### 问题 5: 验证后端测试
 
 **验证后端代码正确性**:
 ```bash
 cd /Users/gugu/Developer/GithubProject/Texas-Hold-em
-.venv/bin/python -m pytest backend/tests/ -q
+./Texas-Hold-em/bin/pytest backend/tests -q
 ```
 
-**预期结果**: `22 passed`
+**预期结果**: `72 passed`
 
 ---
 
@@ -188,8 +188,9 @@ Texas-Hold-em/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py         # 🔴 启动目标: sio_app
-│   │   ├── sio.py          # Socket.IO 事件
-│   │   ├── game/           # 三个引擎
+│   │   ├── sio/            # Socket.IO 事件包(connection/lobby/table/scheduler/state)
+│   │   ├── db.py           # SQLite 持久化(用户/对局/回放)
+│   │   ├── game/           # 三个引擎(texas/guandan/brag)
 │   │   └── ...
 │   ├── allowed_users.json  # 🔴 需手动创建（被 .gitignore）
 │   └── requirements.txt
@@ -211,9 +212,8 @@ Texas-Hold-em/
 - [docs/onboarding/README.md](../onboarding/README.md) - 项目概览
 - [docs/design/ARCHITECTURE.md](../design/ARCHITECTURE.md) - 技术架构
 - [docs/design/API-CONTRACT.md](../design/API-CONTRACT.md) - 前后端契约
-- [docs/internal/backend-contract-ROOT-CAUSE.md](./backend-contract-ROOT-CAUSE.md) - 联调问题根因
+- [docs/onboarding/DEPLOYMENT.md](./DEPLOYMENT.md) - 部署指南
 
 ---
 
-**更新日期**: 2026-06-19  
-**下次更新**: 补充生产部署指南
+**更新日期**: 2026-06-20

@@ -226,21 +226,20 @@ JWT_SECRET=your-secret uvicorn backend.app.main:sio_app --host 0.0.0.0 --port 80
 }
 ```
 
-### 规则
+### 规则（#008 后已改为 SQLite + admin 管理）
 
 - 用户名大小写敏感（"Alice" ≠ "alice"）
-- 只有白名单内的用户能登录
-- 修改后**无需重启**服务（后端会实时读取）
+- `allowed_users.json` 现在**只是首次启动的迁移种子**：服务首次启动时把其中用户导入 SQLite（`users.allowed=1`），**列表第一个用户设为管理员**（`is_admin=1`）。之后白名单的真相在数据库，不再读 JSON。
+- 日常增删白名单走**管理后台**：admin 用户登录后在「白名单管理」页在线添加/移除，或调 `POST/DELETE /api/admin/whitelist`（见 API-CONTRACT §1.5）。**无需改文件、无需重启**。
+- 迁移幂等：重启不会用 JSON 覆盖数据库里的手动改动。
 
 ### 添加新用户
 
 ```bash
-# 编辑白名单
-vim backend/allowed_users.json
+# 推荐：admin 登录 → 白名单管理页在线添加（即时生效，无需重启）
 
-# Docker 环境下（容器会自动读取挂载的文件）
-vim backend/allowed_users.json
-# 无需重启容器
+# 仅首次部署播种：编辑迁移种子文件
+vim backend/allowed_users.json   # 仅在数据库为空时生效
 ```
 
 ---
