@@ -9,6 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
 import { emit, subscribe } from "../socket";
 import { debugLog } from "../utils/debug";
+import { soundManager } from "../utils/sound";
 import Countdown from "./Countdown";
 import HandEndModal from "./HandEndModal";
 import type { ActionLog, ChatMessage, CurrentTurn, GameType, HandEnd, LegalAction, PrivateState, PublicPlayer } from "../types";
@@ -67,6 +68,7 @@ export default function TableShell({
   const [readCount, setReadCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - readCount);
+  const prevStageRef = useRef<string>(stage);
 
   const isMyTurn = currentTurn?.sid === mySid;
   const legalActions = privateState?.legal_actions ?? [];
@@ -86,6 +88,34 @@ export default function TableShell({
   const iAmReady = me?.ready ?? false;
   const readyCount = humanPlayers.filter((p) => p.ready).length;
   const useReadyFlow = humanCount >= 2;
+
+  // 解锁音频（移动端需要用户首次交互）
+  useEffect(() => {
+    const unlockAudio = () => {
+      soundManager.unlock();
+    };
+    document.addEventListener("click", unlockAudio, { once: true });
+    document.addEventListener("touchstart", unlockAudio, { once: true });
+    return () => {
+      document.removeEventListener("click", unlockAudio);
+      document.removeEventListener("touchstart", unlockAudio);
+    };
+  }, []);
+
+  // 监听 stage 变化，发牌时播放音效
+  useEffect(() => {
+    if (prevStageRef.current !== stage && stage !== "waiting") {
+      soundManager.play("deal");
+    }
+    prevStageRef.current = stage;
+  }, [stage]);
+
+  // 监听轮到自己时的音效
+  useEffect(() => {
+    if (currentTurn?.sid === mySid) {
+      soundManager.play("yourTurn");
+    }
+  }, [currentTurn?.sid, mySid]);
 
   // 诊断日志：开始按钮显示条件
   useEffect(() => {
@@ -125,6 +155,7 @@ export default function TableShell({
   useEffect(() => {
     const off = subscribe("table:chat", (msg) => {
       setChatMessages((prev) => [...prev, msg]);
+      soundManager.play("chat"); // 聊天音效
     });
     return off;
   }, []);
@@ -134,9 +165,14 @@ export default function TableShell({
     const off = subscribe("table:hand_end", (data) => {
       setHandEndData(data);
       setShowHandEnd(true);
+      // 检查是否获胜（仅对 Texas/Brag 玩家结算）
+      const myResult = data.results.find((r: any) => r.sid === mySid);
+      if (myResult && "amount" in myResult && myResult.amount > 0) {
+        soundManager.play("win");
+      }
     });
     return off;
-  }, []);
+  }, [mySid]);
 
   // 展开时滚动聊天到底部（已读标记在打开按钮的 onClick 里处理，避免在 effect 里 setState）
   useEffect(() => {
@@ -149,6 +185,15 @@ export default function TableShell({
   useEffect(() => {
     if (log.length === 0) return;
     const latest = log[log.length - 1];
+
+    // 音效触发
+    const action = latest.action.toLowerCase();
+    if (action.includes("fold") || action.includes("弃")) {
+      soundManager.play("fold");
+    } else if (action.includes("bet") || action.includes("raise") || action.includes("注") || action.includes("call") || action.includes("跟")) {
+      soundManager.play("bet");
+    }
+
     const text = `${latest.name} ${latest.action}${latest.detail ? " " + latest.detail : ""}`;
     const timer = setTimeout(() => {
       setLiveAnnounce(text);
@@ -184,6 +229,12 @@ export default function TableShell({
     emit("table:action", { table_id: tableId, action, payload });
   };
 
+  const [soundMuted, setSoundMuted] = useState(soundManager.isMuted());
+  const toggleSound = () => {
+    soundManager.toggleMute();
+    setSoundMuted(soundManager.isMuted());
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-felt">
       {/* 顶部栏 */}
@@ -211,6 +262,13 @@ export default function TableShell({
             title={zhCN.table.copyInviteLink}
           >
             🔗
+          </button>
+          <button
+            onClick={toggleSound}
+            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            title={soundMuted ? "开启音效" : "关闭音效"}
+          >
+            {soundMuted ? "🔇" : "🔊"}
           </button>
         </div>
         <span className="text-sm text-text-lo">
