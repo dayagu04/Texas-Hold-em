@@ -68,6 +68,8 @@ class GuandanEngine:
         self.max_hands = max_hands
         self.hands_played = 0
         self.next_hand_in = 0
+        # 逐 action 序列（#013 回放）：每局 start_hand 时清空，handle_action 累积
+        self.full_action_log: list[dict] = []
 
     # ---- GameEngine 接口实现 ----
     def add_player(self, sid: str, name: str, seat: int,
@@ -107,6 +109,7 @@ class GuandanEngine:
         self.stage = Stage.PLAY  # v1 跳过进贡
         self.hand_in_progress = True
         self.hand_id += 1
+        self.full_action_log = []  # 新局清空逐 action 序列（#013）
         self.last_play = None
         self.pass_streak = 0
         self.rankings = []
@@ -155,6 +158,10 @@ class GuandanEngine:
 
             self.last_play = {"sid": sid, "combo": combo, "cards": played_cards}
             self.pass_streak = 0
+            # 记录出牌（#013 回放）：payload 含出的牌 code 串
+            self._log_action(sid, player.name, "play", {
+                "cards": [c.to_dict()["code"] for c in played_cards],
+            })
 
             # 检查是否清手
             if not player.hole:
@@ -167,6 +174,7 @@ class GuandanEngine:
 
         elif action == "pass":
             self.pass_streak += 1
+            self._log_action(sid, player.name, "pass", None)
             # 连续 3 人 pass → 上家重新开张
             if self.pass_streak >= 3 and self.last_play:
                 self.last_play = None
@@ -176,6 +184,17 @@ class GuandanEngine:
 
         self._advance()
         return True, ""
+
+    def _log_action(self, sid: str, name: str, action: str, payload: dict | None):
+        """累积逐 action 序列（#013 回放）。"""
+        self.full_action_log.append({
+            "seq": len(self.full_action_log),
+            "sid": sid,
+            "name": name,
+            "action": action,
+            "payload": payload,
+            "stage": self.stage.value,
+        })
 
     def public_state(self) -> dict:
         """公开状态，不含底牌。"""

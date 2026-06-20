@@ -80,6 +80,8 @@ class TexasEngine:
         self.max_hands = max_hands
         self.hands_played = 0
         self.next_hand_in = 0
+        # 逐 action 序列（#013 回放）：每局 start_hand 时清空，handle_action 累积
+        self.full_action_log: list[dict] = []
 
     # ---- GameEngine 接口实现 ----
     def add_player(self, sid: str, name: str, seat: int,
@@ -116,6 +118,7 @@ class TexasEngine:
         self.stage = Stage.PREFLOP
         self.hand_in_progress = True
         self.hand_id += 1
+        self.full_action_log = []  # 新局清空逐 action 序列（#013）
 
         ready = self._ready_players()
         seats = [p.seat for p in ready]
@@ -171,6 +174,22 @@ class TexasEngine:
                 self._reset_acted_except(sid)
         else:
             return False, "未知操作"
+
+        # 记录动作到逐 action 序列（#013 回放）。此时 stage 仍是动作发生时的 stage。
+        # 金额语义：call=本次跟注额；raise/all_in=本轮累计下注到的总额（player.bet）。
+        log_payload = None
+        if action == "call":
+            log_payload = {"amount": to_call}
+        elif action in ("raise", "all_in"):
+            log_payload = {"amount": player.bet}
+        self.full_action_log.append({
+            "seq": len(self.full_action_log),
+            "sid": sid,
+            "name": player.name,
+            "action": action,
+            "payload": log_payload,
+            "stage": self.stage.value,
+        })
 
         player.acted = True
         self._advance(sid)

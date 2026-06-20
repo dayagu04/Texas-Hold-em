@@ -75,6 +75,8 @@ class BragEngine:
         self.max_hands = max_hands
         self.hands_played = 0
         self.next_hand_in = 0
+        # 逐 action 序列（#013 回放）：每局 start_hand 时清空，handle_action 累积
+        self.full_action_log: list[dict] = []
 
     # ---- GameEngine 接口实现 ----
     def add_player(self, sid: str, name: str, seat: int,
@@ -110,6 +112,7 @@ class BragEngine:
         self.stage = Stage.BETTING
         self.hand_in_progress = True
         self.hand_id += 1
+        self.full_action_log = []  # 新局清空逐 action 序列（#013）
         self.current_bet = self.ante
         self.last_raiser = None
         self.no_raise_rounds = 0
@@ -147,6 +150,7 @@ class BragEngine:
         if action == "look":
             # 看牌（不推进回合，玩家可继续行动）
             player.looked = True
+            self._log_action(sid, player.name, "look", None)
             return True, ""
         elif action == "fold":
             player.folded = True
@@ -198,8 +202,29 @@ class BragEngine:
         else:
             return False, "未知操作"
 
+        # 记录动作（look 已在上面单独记录并 return）
+        log_payload = None
+        if action == "call":
+            log_payload = {"amount": self.current_bet * (2 if player.looked else 1)}
+        elif action == "raise":
+            log_payload = {"amount": payload.get("amount", 0)}
+        elif action == "compare":
+            log_payload = {"target_sid": payload.get("target_sid")}
+        self._log_action(sid, player.name, action, log_payload)
+
         self._advance(sid)
         return True, ""
+
+    def _log_action(self, sid: str, name: str, action: str, payload: dict | None):
+        """累积逐 action 序列（#013 回放）。"""
+        self.full_action_log.append({
+            "seq": len(self.full_action_log),
+            "sid": sid,
+            "name": name,
+            "action": action,
+            "payload": payload,
+            "stage": self.stage.value,
+        })
 
     def public_state(self) -> dict:
         """公开状态，不含任何底牌。"""
