@@ -27,6 +27,7 @@ class Player:
         self.chips = chips
         self.is_bot = is_bot
         self.bot_level = bot_level
+        self.avatar: str | None = None  # 头像缓存(add_player 时填充)
         self.hole: list = []
         self.bet = 0
         self.total_bet = 0
@@ -86,6 +87,9 @@ class TexasEngine:
         player = Player(sid, name, seat, self.initial_chips, is_bot, bot_level)
         if is_bot:
             player.ready = True
+        else:
+            # 缓存真人头像(bot 无需头像)
+            player.avatar = load_profile(name).get("avatar")
         self.players[sid] = player
 
     def remove_player(self, sid: str) -> None:
@@ -184,7 +188,7 @@ class TexasEngine:
                 "chips": p.chips,
                 "status": self._player_status(p),
                 "ready": p.ready,
-                "avatar": load_profile(p.name).get("avatar"),
+                "avatar": p.avatar,  # 从内存缓存读
             }
 
         return {

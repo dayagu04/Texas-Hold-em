@@ -31,6 +31,7 @@ class Player:
         self.seat = seat
         self.is_bot = is_bot
         self.bot_level = bot_level
+        self.avatar: str | None = None  # 头像缓存(add_player 时填充)
         self.hole: list[Card] = []
         self.rank: int | None = None  # 1/2/3/4
         self.sitting_out = False
@@ -76,6 +77,9 @@ class GuandanEngine:
         player = Player(sid, name, seat, is_bot, bot_level)
         if is_bot:
             player.ready = True
+        else:
+            from ...profiles import load_profile
+            player.avatar = load_profile(name).get("avatar")
         self.players[sid] = player
 
     def remove_player(self, sid: str) -> None:
@@ -184,7 +188,7 @@ class GuandanEngine:
                 "bot_level": p.bot_level,
                 "status": "won" if p.rank else "active",
                 "ready": p.ready,
-                "avatar": load_profile(p.name).get("avatar"),
+                "avatar": p.avatar,  # 从内存缓存读
             }
 
         team_a = [p.sid for p in self.players.values() if p.seat in [0, 2]]
