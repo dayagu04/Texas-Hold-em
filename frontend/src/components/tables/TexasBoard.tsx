@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
 import { subscribe } from "../../socket";
+import { soundManager } from "../../utils/sound";
 import CardSprite from "../CardSprite";
 import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
@@ -40,11 +41,15 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
   const { players, payload, current_turn, stage, hand_id, log } = state;
   const { pot, side_pots, community, button_seat, player_bets } = payload;
 
-  // 发牌动画触发：hand_id 变化时重置 dealKey 以触发 framer-motion 重新挂载
+  // 发牌动画触发：hand_id 变化时重置 dealKey 以触发 framer-motion 重新挂载 + 发牌音
   const prevHandId = useRef(hand_id);
   useEffect(() => {
     if (hand_id !== prevHandId.current) {
       prevHandId.current = hand_id;
+      // 发牌音：hand_id 变化意味着新一手牌开始发牌
+      if (hand_id) {
+        soundManager.play("deal");
+      }
     }
   }, [hand_id]);
 
@@ -69,7 +74,7 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
   });
 
   // 收池动画: 追踪上一帧各家下注;某街结束(总下注由 >0 归零)时,
-  // 从各家下注区生成飞向底池的临时筹码。
+  // 从各家下注区生成飞向底池的临时筹码 + 筹码音。
   const [flying, setFlying] = useState<FlyingChip[]>([]);
   const prevBets = useRef<Record<string, number>>(player_bets);
   useEffect(() => {
@@ -86,6 +91,8 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
         });
       if (chips.length) {
         setFlying(chips);
+        // 筹码入池音：收池动画开始时触发
+        soundManager.play("bet");
         const t = setTimeout(() => setFlying([]), 650);
         prevBets.current = player_bets;
         return () => clearTimeout(t);
@@ -96,7 +103,7 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player_bets, hand_id]);
 
-  // 飘字反馈：监听 log 最后一条，生成飘字
+  // 飘字反馈：监听 log 最后一条，生成飘字 + 可选音效
   const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
   const prevLogLen = useRef(log.length);
   useEffect(() => {
@@ -112,18 +119,22 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
       if (actionName === "fold") {
         text = "弃牌";
         color = "lo";
+        soundManager.play("fold");
       } else if (actionName === "check") {
         text = "过牌";
         color = "lo";
       } else if (actionName === "call") {
         text = `跟注${detail ? " " + detail : ""}`;
         color = "gold";
+        soundManager.play("bet");
       } else if (actionName === "raise") {
         text = `加注${detail ? " " + detail : ""}`;
         color = "gold";
+        soundManager.play("bet");
       } else if (actionName === "all_in") {
         text = "ALL IN";
         color = "gold";
+        soundManager.play("bet");
       } else if (actionName === "look") {
         text = "看牌";
         color = "gold";
@@ -146,7 +157,7 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
     prevLogLen.current = log.length;
   }, [log]);
 
-  // 赢家演出：监听 hand_end 事件，记录赢家 sid
+  // 赢家演出：监听 hand_end 事件，记录赢家 sid + 胜利音
   const [winnerSids, setWinnerSids] = useState<string[]>([]);
   useEffect(() => {
     const off = subscribe("table:hand_end", (data: HandEnd) => {
@@ -155,6 +166,10 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
         .filter((r: any) => "amount" in r && r.amount > 0)
         .map((r: any) => r.sid);
       setWinnerSids(winners);
+      // 胜利音：赢家演出开始时触发
+      if (winners.length > 0) {
+        soundManager.play("win");
+      }
       // 3秒后清除赢家状态
       const timer = setTimeout(() => setWinnerSids([]), 3000);
       return () => clearTimeout(timer);
@@ -238,6 +253,16 @@ function DesktopTable({
   floatingTexts: FloatingText[];
   winnerSids: string[];
 }) {
+  // 翻公共牌音：监听 community 长度变化（flop/turn/river 发牌时触发）
+  const prevCommLen = useRef(community.length);
+  useEffect(() => {
+    if (community.length > prevCommLen.current && community.length > 0) {
+      // 公共牌新增时播放翻牌音（flop 3张 / turn 1张 / river 1张）
+      soundManager.play("deal");
+    }
+    prevCommLen.current = community.length;
+  }, [community.length]);
+
   return (
     <div className="relative h-full">
       {/* 椭圆桌面：多层材质叠加 + 立体桌沿 + 绒布质感。inset 收窄让桌面占满主区。 */}
@@ -365,9 +390,9 @@ function DesktopTable({
                 />
               )}
 
-              {/* 赢家金币雨 */}
+              {/* 赢家金币雨（移动端降级：< 768px 关闭粒子效果） */}
               {isWinner && (
-                <div className="pointer-events-none absolute inset-0">
+                <div className="pointer-events-none absolute inset-0 hidden md:block">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <motion.div
                       key={`coin-${i}`}
@@ -547,6 +572,15 @@ function MobileTable({
   current_turn: CurrentTurn | null;
   privateState: PrivateState | null;
 }) {
+  // 翻公共牌音：移动端也需要（与桌面端逻辑一致）
+  const prevCommLen = useRef(community.length);
+  useEffect(() => {
+    if (community.length > prevCommLen.current && community.length > 0) {
+      soundManager.play("deal");
+    }
+    prevCommLen.current = community.length;
+  }, [community.length]);
+
   const me = arranged[0]; // 自己永远第一个（底部）
   const opponents = arranged.slice(1); // 其余玩家（顶部横排）
 

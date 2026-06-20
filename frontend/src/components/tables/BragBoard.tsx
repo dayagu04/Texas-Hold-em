@@ -4,9 +4,12 @@
  * 中央池底数字 + ante / current_bet 小标签。
  * 自己的牌片有"看牌"覆盖层，未看时全黑且印着金色"看牌"字样；点击后 3D 翻面（M4 动画 600ms）。
  * M3 骨架版：布局 + 看牌状态切换；M4 精修 3D 翻面动画 + compare 浮层选目标。
+ * #015-C：音效联动 + 质感对齐（桌面 felt + 立体桌沿 + 呼吸光环 + 卡牌厚度）。
  */
 import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
 import { zhCN } from "../../i18n/zh-CN";
+import { soundManager } from "../../utils/sound";
 import CardSprite from "../CardSprite";
 import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
@@ -20,8 +23,26 @@ interface Props {
 }
 
 export default function BragBoard({ state, privateState, mySid }: Props) {
-  const { players, payload, current_turn, stage } = state;
+  const { players, payload, current_turn, stage, log } = state;
   const { pot, ante, current_bet, looked } = payload;
+
+  // 下注音效：监听 log 最后一条
+  const prevLogLen = useRef(log.length);
+  useEffect(() => {
+    if (log.length > prevLogLen.current && log.length > 0) {
+      const latest = log[log.length - 1];
+      const actionName = latest.action;
+
+      if (actionName === "fold") {
+        soundManager.play("fold");
+      } else if (actionName === "call" || actionName === "raise" || actionName === "all_in") {
+        soundManager.play("bet");
+      } else if (actionName === "look") {
+        soundManager.play("deal");
+      }
+    }
+    prevLogLen.current = log.length;
+  }, [log]);
 
   const myIdx = players.findIndex((p) => p.sid === mySid);
   const arranged =
