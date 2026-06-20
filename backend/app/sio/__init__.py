@@ -1,51 +1,28 @@
 """Socket.IO 事件处理：连接、大厅、桌面操作。
 
 按 API-CONTRACT.md 实现所有事件。
+
+包结构（拆分进行中）：
+- _core.py     sio 实例 + emit_error（无依赖，杜绝循环）
+- state.py     共享运行时状态（SessionManager + 模块级 dict）
+- 其余 handler 与辅助函数当前仍在本文件，将逐步抽出
 """
-import os
-import socketio
 import asyncio
 import random
 
 from ..auth import verify_token
-from ..lobby import lobby
 from ..logger import log
 from .. import db
+from ._core import sio, emit_error
+from . import state
 
-# CORS 配置：生产从 ALLOWED_ORIGINS 读，开发默认 localhost
-ALLOWED_ORIGINS = os.getenv(
-    "ALLOWED_ORIGINS",
-    "http://localhost:5166,http://127.0.0.1:5166"
-)
-cors_origins = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
-
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
-
-# sid -> {name, table_id | None}
-sessions: dict[str, dict] = {}
-# name -> sid (同名顶替)
-name_to_sid: dict[str, str] = {}
-# sid -> asyncio.Task (离线计时器)
-disconnect_timers: dict[str, asyncio.Task] = {}
-# table_id -> asyncio.Task (回合超时计时器)
-turn_timers: dict[str, asyncio.Task] = {}
-# table_id -> asyncio.Task (多局模式自动开下局计时器 #006)
-auto_start_timers: dict[str, asyncio.Task] = {}
-# table_id -> hand_id (已发送 hand_end 的 hand_id，避免重复发送)
-hand_end_sent: dict[str, str] = {}
-# table_id -> {sid: chips}  开局时筹码快照，用于结算净输赢（net = 结束时 chips - 快照）
-chips_snapshots: dict[str, dict[str, int]] = {}
-
-# 回合超时秒数（真人玩家未操作自动 fold/pass）
-TURN_TIMEOUT = 30
-
-
-async def _emit_error(sid: str, code: str, message: str, context: dict = None):
-    """统一错误发送。"""
-    payload = {"code": code, "message": message}
-    if context:
-        payload["context"] = context
-    await sio.emit("error", payload, room=sid)
+# 兼容别名：旧代码与测试用 _emit_error
+_emit_error = emit_error
+# 兼容别名：模块级常量
+TURN_TIMEOUT = state.TURN_TIMEOUT
+# 兼容别名：main.py `from .sio import sio, sessions, _broadcast_lobby_update`
+# sessions 指向同一 dict（生产中只就地增删、不重绑），供 cleanup 等只读使用
+sessions = state.sessions
 
 
 @sio.event
@@ -86,28 +63,28 @@ async def connect(sid, environ, auth=None):
         raise ConnectionRefusedError("INVALID_TOKEN")
 
     name = payload["name"]
-    log(f"[connect] verified, name={name}, name_to_sid_existing={name in name_to_sid}")
+    log(f"[connect] verified, name={name}, name_to_sid_existing={name in state.name_to_sid}")
 
     # 同名顶替
-    if name in name_to_sid:
-        old_sid = name_to_sid[name]
+    if name in state.name_to_sid:
+        old_sid = state.name_to_sid[name]
         # 取消旧连接的离线计时器（重连场景）
-        if old_sid in disconnect_timers:
-            disconnect_timers[old_sid].cancel()
-            del disconnect_timers[old_sid]
+        if old_sid in state.disconnect_timers:
+            state.disconnect_timers[old_sid].cancel()
+            del state.disconnect_timers[old_sid]
 
         # 恢复桌内状态
-        old_sess = sessions.get(old_sid)
+        old_sess = state.sessions.get(old_sid)
         if old_sess and old_sess.get("table_id"):
             # 重连：保留 table_id，更新 sid
             table_id = old_sess["table_id"]
-            sessions.pop(old_sid, None)
-            sessions[sid] = {"name": name, "table_id": table_id}
-            name_to_sid[name] = sid
+            state.sessions.pop(old_sid, None)
+            state.sessions[sid] = {"name": name, "table_id": table_id}
+            state.name_to_sid[name] = sid
 
             # 重新加入房间
             await sio.enter_room(sid, table_id)
-            engine = lobby.get_table(table_id)
+            engine = state.lobby.get_table(table_id)
             if engine:
                 # 更新引擎中的玩家 sid（如果引擎存储 sid）
                 # 掼蛋/德扑/炸金花的引擎以 sid 为 key，需要迁移
@@ -129,10 +106,10 @@ async def connect(sid, environ, auth=None):
         # 非重连场景：同名顶替
         await sio.emit("kicked", {"reason": "同名用户登录"}, room=old_sid)
         await sio.disconnect(old_sid)
-        sessions.pop(old_sid, None)
+        state.sessions.pop(old_sid, None)
 
-    name_to_sid[name] = sid
-    sessions[sid] = {"name": name, "table_id": None}
+    state.name_to_sid[name] = sid
+    state.sessions[sid] = {"name": name, "table_id": None}
     log(f"[connect] NEW SESSION: sid={sid}, name={name}")
 
 
@@ -140,7 +117,7 @@ async def connect(sid, environ, auth=None):
 async def disconnect(sid):
     """断线处理：保留座位 30s，超时自动 fold/pass。"""
     log(f"[disconnect] {sid}")
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -148,7 +125,7 @@ async def disconnect(sid):
     if table_id:
         # 启动 30s 计时器
         timer = asyncio.create_task(_handle_disconnect_timeout(sid, table_id))
-        disconnect_timers[sid] = timer
+        state.disconnect_timers[sid] = timer
 
 
 async def _handle_disconnect_timeout(sid: str, table_id: str):
@@ -157,17 +134,17 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
         await asyncio.sleep(30)
 
         # 检查是否已重连
-        if sid in disconnect_timers:
-            del disconnect_timers[sid]
+        if sid in state.disconnect_timers:
+            del state.disconnect_timers[sid]
         else:
             return  # 已重连，取消操作
 
         # 检查玩家是否仍在桌上
-        sess = sessions.get(sid)
+        sess = state.sessions.get(sid)
         if not sess or sess.get("table_id") != table_id:
             return
 
-        engine = lobby.get_table(table_id)
+        engine = state.lobby.get_table(table_id)
 
         # 仅当有进行中的手牌且轮到该玩家时，才自动执行保守动作（fold/pass）
         if engine and engine.hand_in_progress and engine.current_turn == sid:
@@ -203,9 +180,9 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
         # 否则真人从"未开局/已结算"的桌断线会残留 orphan session，
         # 使该桌永远被判为"有真人"而无法被 cleanup 回收（死局残留根因）
         name = sess["name"]
-        sessions.pop(sid, None)
-        if name in name_to_sid and name_to_sid[name] == sid:
-            del name_to_sid[name]
+        state.sessions.pop(sid, None)
+        if name in state.name_to_sid and state.name_to_sid[name] == sid:
+            del state.name_to_sid[name]
 
         if table_id:
             _destroy_table_if_no_humans(table_id)
@@ -222,14 +199,14 @@ async def _handle_disconnect_timeout(sid: str, table_id: str):
 @sio.on('lobby:list')
 async def lobby_list(sid, data):
     """推送完整大厅列表。"""
-    tables = lobby.list_tables()
+    tables = state.lobby.list_tables()
     await sio.emit("lobby:update", {"tables": tables}, room=sid)
 
 
 @sio.on('lobby:create_table')
 async def lobby_create_table(sid, data):
     """创建房间并自动入座 0 号位。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     log(f"[create_table] ENTRY: sid={sid}, name={sess.get('name') if sess else None}, has_session={sess is not None}, data={data}")
     if not sess:
         return
@@ -245,7 +222,7 @@ async def lobby_create_table(sid, data):
     max_hands = data.get("max_hands")
 
     try:
-        table_id = lobby.create_table(
+        table_id = state.lobby.create_table(
             name=name,
             game_type=game_type,
             seats=seats,
@@ -259,7 +236,7 @@ async def lobby_create_table(sid, data):
         await _emit_error(sid, "INVALID_ACTION", str(e), {"game_type": game_type})
         return
 
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     engine.add_player(sid, sess["name"], seat=0)
     sess["table_id"] = table_id
     await sio.enter_room(sid, table_id)
@@ -277,7 +254,7 @@ async def lobby_create_table(sid, data):
             log(f"[WARN create_table] skip bot seat={bot_seat}: {e}")
 
     _sid_rooms = [r for r, members in sio.manager.rooms.get('/', {}).items() if sid in members]
-    log(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in sessions}")
+    log(f"[DEBUG] BEFORE emit lobby:joined: sid={sid}, table={table_id}, sid_rooms={_sid_rooms}, sess.connected={sid in state.sessions}")
     await sio.emit("lobby:joined", {"table_id": table_id, "your_seat": 0}, room=sid)
     log(f"[DEBUG] AFTER emit lobby:joined")
     await _broadcast_table_state(table_id)
@@ -287,7 +264,7 @@ async def lobby_create_table(sid, data):
 @sio.on('lobby:quick_match')
 async def lobby_quick_match(sid, data):
     """快速匹配：自动选一个等待中未满的指定玩法房间并入座最小空位。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -296,7 +273,7 @@ async def lobby_quick_match(sid, data):
         return
 
     # 选房
-    table_id = lobby.quick_match(game_type)
+    table_id = state.lobby.quick_match(game_type)
     if not table_id:
         # 无可加入房间，回 no_match
         await sio.emit("lobby:no_match", {"game_type": game_type}, room=sid)
@@ -309,7 +286,7 @@ async def lobby_quick_match(sid, data):
 @sio.on('lobby:join_table')
 async def lobby_join_table(sid, data):
     """加入已有房间。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -319,7 +296,7 @@ async def lobby_join_table(sid, data):
     seat = data.get("seat")
     spectate = data.get("spectate", False)
 
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         await _emit_error(sid, "TABLE_NOT_FOUND", "房间不存在", {"table_id": table_id})
         return
@@ -378,12 +355,12 @@ async def lobby_join_table(sid, data):
 @sio.on('lobby:leave_table')
 async def lobby_leave_table(sid, data):
     """离桌（不退大厅）。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
     table_id = data.get("table_id")
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if engine:
         engine.remove_player(sid)
         await sio.leave_room(sid, table_id)
@@ -400,12 +377,12 @@ async def table_sync(sid, data):
 
     纯只读，无任何座位/入座副作用，天然幂等。修复"创建房间卡加载中"（广播时机竞争）。
     """
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
     table_id = data.get("table_id")
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     log(f"[table:sync] sid={sid}, table_id={table_id}, found={engine is not None}")
     if not engine:
         return
@@ -426,12 +403,12 @@ async def table_sync(sid, data):
 @sio.on('table:start_hand')
 async def table_start_hand(sid, data):
     """开始新一手。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
     table_id = data.get("table_id")
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -451,12 +428,12 @@ async def table_start_hand(sid, data):
 @sio.on('table:set_ready')
 async def table_set_ready(sid, data):
     """玩家准备/取消准备。≥2 真人全部准备后自动开局（见 _maybe_auto_start）。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
     table_id = data.get("table_id")
     ready = bool(data.get("ready", True))
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
     player = engine.players.get(sid)
@@ -471,7 +448,7 @@ async def table_set_ready(sid, data):
 @sio.on('table:action')
 async def table_action(sid, data):
     """玩家行动。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -479,7 +456,7 @@ async def table_action(sid, data):
     action = data.get("action")
     payload = data.get("payload", {})
 
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -495,7 +472,7 @@ async def table_action(sid, data):
 @sio.on('table:add_bot')
 async def table_add_bot(sid, data):
     """添加 Bot。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -503,7 +480,7 @@ async def table_add_bot(sid, data):
     seat = data.get("seat")
     level = data.get("level", "easy")
 
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -517,14 +494,14 @@ async def table_add_bot(sid, data):
 @sio.on('table:remove_bot')
 async def table_remove_bot(sid, data):
     """移除 Bot。"""
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
     table_id = data.get("table_id")
     seat = data.get("seat")
 
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -542,7 +519,7 @@ async def table_remove_bot(sid, data):
 async def table_chat(sid, data):
     """聊天。"""
     import time
-    sess = sessions.get(sid)
+    sess = state.sessions.get(sid)
     if not sess:
         return
 
@@ -563,14 +540,14 @@ async def table_chat(sid, data):
 # ---- 辅助函数 ----
 def _cancel_turn_timer(table_id: str):
     """取消某桌的回合超时计时器（如有）。"""
-    timer = turn_timers.pop(table_id, None)
+    timer = state.turn_timers.pop(table_id, None)
     if timer and not timer.done():
         timer.cancel()
 
 
 def _destroy_table_if_no_humans(table_id: str):
     """若该桌已无真人玩家,销毁该桌并清理所有计时器/记录。"""
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -589,16 +566,16 @@ def _destroy_table_if_no_humans(table_id: str):
     _cancel_auto_start_timer(table_id)
 
     # 清掉记录
-    hand_end_sent.pop(table_id, None)
+    state.hand_end_sent.pop(table_id, None)
 
     # 从大厅移除
-    lobby.remove_table(table_id)
+    state.lobby.remove_table(table_id)
 
     # 广播大厅更新
     asyncio.create_task(_broadcast_lobby_update())
 
 
-async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT):
+async def _start_turn_timer(table_id: str, sid: str, timeout: int = state.TURN_TIMEOUT):
     """启动回合超时计时器：真人玩家 timeout 秒未操作则自动 fold/pass。"""
     # 取消旧计时器（每次广播都会重置，避免叠加）
     _cancel_turn_timer(table_id)
@@ -609,7 +586,7 @@ async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT
         except asyncio.CancelledError:
             return
 
-        engine = lobby.get_table(table_id)
+        engine = state.lobby.get_table(table_id)
         # 已不是该玩家回合 / 手牌已结束 → 放弃
         if not engine or not engine.hand_in_progress or engine.current_turn != sid:
             return
@@ -629,26 +606,26 @@ async def _start_turn_timer(table_id: str, sid: str, timeout: int = TURN_TIMEOUT
             log(f"⏱️  [timeout] {sid} auto-{action} 失败: {err}")
             return
 
-        turn_timers.pop(table_id, None)
+        state.turn_timers.pop(table_id, None)
         await _broadcast_table_state(table_id)
         await _run_bot_loop(table_id)
 
-    turn_timers[table_id] = asyncio.create_task(timeout_handler())
+    state.turn_timers[table_id] = asyncio.create_task(timeout_handler())
 
 
 def _snapshot_chips(table_id: str):
     """开局时快照各玩家筹码，供结算净输赢使用（net = 结束时 chips - 开局时 chips）。"""
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
     # 对有 chips 属性的引擎（德扑、炸金花）快照；掼蛋无 chips
     if hasattr(list(engine.players.values())[0] if engine.players else None, "chips"):
-        chips_snapshots[table_id] = {
+        state.chips_snapshots[table_id] = {
             p.sid: p.chips for p in engine.players.values()
         }
     else:
         # 掼蛋等无筹码引擎：快照空 dict（后续走排名逻辑）
-        chips_snapshots[table_id] = {}
+        state.chips_snapshots[table_id] = {}
 
 
 def _record_hand_to_db(engine):
@@ -667,7 +644,7 @@ def _record_hand_to_db(engine):
         if hasattr(engine, "community") and engine.community:
             board = "".join(c.code for c in engine.community)
 
-        snapshot = chips_snapshots.get(table_id, {})
+        snapshot = state.chips_snapshots.get(table_id, {})
         players_data = []
 
         for p in engine.players.values():
@@ -709,13 +686,13 @@ def _record_hand_to_db(engine):
             })
 
         db.record_hand(table_id, game_type, pot, board, players_data)
-        chips_snapshots.pop(table_id, None)  # 清理快照
+        state.chips_snapshots.pop(table_id, None)  # 清理快照
     except Exception as e:
         log(f"[db] record_hand failed for table={engine.id}: {e}")
 
 
 async def _broadcast_table_state(table_id: str):
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 
@@ -743,25 +720,25 @@ async def _broadcast_table_state(table_id: str):
     # 如果手牌刚结束且尚未发送 hand_end，emit table:hand_end
     if engine.is_hand_over() and hasattr(engine, 'get_hand_end_payload'):
         current_hand_id = str(engine.hand_id)
-        if hand_end_sent.get(table_id) != current_hand_id:
+        if state.hand_end_sent.get(table_id) != current_hand_id:
             hand_end_payload = engine.get_hand_end_payload()
             await sio.emit("table:hand_end", hand_end_payload, room=table_id)
-            hand_end_sent[table_id] = current_hand_id
+            state.hand_end_sent[table_id] = current_hand_id
 
-            # 记录本局到数据库（每局只记一次，由 hand_end_sent 去重保证）
+            # 记录本局到数据库（每局只记一次，由 state.hand_end_sent 去重保证）
             _record_hand_to_db(engine)
 
             # 多局模式（#006）：next_hand_in > 0 时启动自动开下局定时器
             if hand_end_payload.get("next_hand_in", 0) > 0:
                 _cancel_auto_start_timer(table_id)
-                auto_start_timers[table_id] = asyncio.create_task(
+                state.auto_start_timers[table_id] = asyncio.create_task(
                     _auto_start_next_hand(table_id, hand_end_payload["next_hand_in"])
                 )
 
 
 def _cancel_auto_start_timer(table_id: str):
     """取消某桌的自动开下局计时器（如有）。"""
-    timer = auto_start_timers.pop(table_id, None)
+    timer = state.auto_start_timers.pop(table_id, None)
     if timer and not timer.done():
         timer.cancel()
 
@@ -770,7 +747,7 @@ async def _auto_start_next_hand(table_id: str, delay_ms: int):
     """多局模式：delay_ms 后自动开下一局（人数足够且无进行中手牌时）。"""
     try:
         await asyncio.sleep(delay_ms / 1000.0)
-        engine = lobby.get_table(table_id)
+        engine = state.lobby.get_table(table_id)
         if engine and engine.can_start() and not engine.hand_in_progress:
             _snapshot_chips(table_id)  # 扣盲注/底注前快照（零和）
             engine.start_hand()
@@ -779,18 +756,18 @@ async def _auto_start_next_hand(table_id: str, delay_ms: int):
     except asyncio.CancelledError:
         pass
     finally:
-        auto_start_timers.pop(table_id, None)
+        state.auto_start_timers.pop(table_id, None)
 
 
 async def _broadcast_lobby_update():
     """广播大厅更新。"""
-    tables = lobby.list_tables()
+    tables = state.lobby.list_tables()
     await sio.emit("lobby:update", {"tables": tables})
 
 
 async def _maybe_auto_start(table_id: str):
     """≥2 真人且全部真人已准备时,自动开局。1 真人场景不自动开(走手动按钮)。"""
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine or engine.hand_in_progress:
         return
     humans = [p for p in engine.players.values() if not getattr(p, "is_bot", False)]
@@ -810,7 +787,7 @@ async def _maybe_auto_start(table_id: str):
 
 async def _run_bot_loop(table_id: str):
     """循环执行 Bot 行动。"""
-    engine = lobby.get_table(table_id)
+    engine = state.lobby.get_table(table_id)
     if not engine:
         return
 

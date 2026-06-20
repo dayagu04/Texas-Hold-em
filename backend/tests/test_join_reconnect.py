@@ -18,13 +18,16 @@ from backend.app.lobby import Lobby
 
 @pytest.fixture
 def fresh_state(monkeypatch):
-    """每个用例用全新 lobby / sessions，并把网络调用替换为 no-op。"""
+    """每个用例用全新 lobby / sessions，并把网络调用替换为 no-op。
+
+    状态已迁入 sio.state 子模块，monkeypatch 目标相应改为 sio_mod.state.X。
+    """
     lobby = Lobby()
-    monkeypatch.setattr(sio_mod, "lobby", lobby)
-    monkeypatch.setattr(sio_mod, "sessions", {})
-    monkeypatch.setattr(sio_mod, "name_to_sid", {})
-    monkeypatch.setattr(sio_mod, "disconnect_timers", {})
-    monkeypatch.setattr(sio_mod, "turn_timers", {})
+    monkeypatch.setattr(sio_mod.state, "lobby", lobby)
+    monkeypatch.setattr(sio_mod.state, "sessions", {})
+    monkeypatch.setattr(sio_mod.state, "name_to_sid", {})
+    monkeypatch.setattr(sio_mod.state, "disconnect_timers", {})
+    monkeypatch.setattr(sio_mod.state, "turn_timers", {})
 
     async def _noop(*args, **kwargs):
         return None
@@ -52,7 +55,7 @@ def test_join_replaces_stale_player(fresh_state):
     engine.current_turn = "sid_A"
 
     # 新 sid_B 用同 name 加入
-    sio_mod.sessions["sid_B"] = {"name": "Alice", "table_id": None}
+    sio_mod.state.sessions["sid_B"] = {"name": "Alice", "table_id": None}
     asyncio.run(sio_mod.lobby_join_table("sid_B", {"table_id": table_id}))
 
     alice_players = [p for p in engine.players.values() if p.name == "Alice"]
@@ -63,7 +66,7 @@ def test_join_replaces_stale_player(fresh_state):
     assert engine.players["sid_B"].seat == 0
     # current_turn 同步迁移到新 sid
     assert engine.current_turn == "sid_B"
-    assert sio_mod.sessions["sid_B"]["table_id"] == table_id
+    assert sio_mod.state.sessions["sid_B"]["table_id"] == table_id
 
 
 def test_join_assigns_new_seat_when_no_stale(fresh_state):
@@ -73,7 +76,7 @@ def test_join_assigns_new_seat_when_no_stale(fresh_state):
     engine = lobby.get_table(table_id)
     engine.add_player("sid_A", "Alice", seat=0)
 
-    sio_mod.sessions["sid_B"] = {"name": "Bob", "table_id": None}
+    sio_mod.state.sessions["sid_B"] = {"name": "Bob", "table_id": None}
     asyncio.run(sio_mod.lobby_join_table("sid_B", {"table_id": table_id}))
 
     assert "sid_B" in engine.players
@@ -90,10 +93,10 @@ def test_disconnect_cleanup_removes_player_when_idle(fresh_state, monkeypatch):
     engine = lobby.get_table(table_id)
     engine.add_player("sid_A", "Alice", seat=0)
 
-    sio_mod.sessions["sid_A"] = {"name": "Alice", "table_id": table_id}
-    sio_mod.name_to_sid["Alice"] = "sid_A"
+    sio_mod.state.sessions["sid_A"] = {"name": "Alice", "table_id": table_id}
+    sio_mod.state.name_to_sid["Alice"] = "sid_A"
     # 标记计时器存在，让超时逻辑认为尚未重连
-    sio_mod.disconnect_timers["sid_A"] = object()
+    sio_mod.state.disconnect_timers["sid_A"] = object()
 
     # 跳过真实 30s 等待
     async def _instant_sleep(*args, **kwargs):
@@ -105,5 +108,5 @@ def test_disconnect_cleanup_removes_player_when_idle(fresh_state, monkeypatch):
     asyncio.run(sio_mod._handle_disconnect_timeout("sid_A", table_id))
 
     assert "sid_A" not in engine.players
-    assert "sid_A" not in sio_mod.sessions
-    assert "Alice" not in sio_mod.name_to_sid
+    assert "sid_A" not in sio_mod.state.sessions
+    assert "Alice" not in sio_mod.state.name_to_sid
