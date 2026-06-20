@@ -1,25 +1,18 @@
 """用户白名单鉴权与 JWT 签发。"""
-import json
 import os
-from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
 import jwt
 
-ALLOWED_FILE = Path(__file__).parent.parent / "allowed_users.json"
 SECRET = os.getenv("APP_SECRET", "dev-secret-change-in-production")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 8
 
 
-def load_allowed_users() -> set[str]:
-    if not ALLOWED_FILE.exists():
-        return set()
-    return set(json.loads(ALLOWED_FILE.read_text())["allowed_users"])
-
-
 def is_allowed(username: str) -> bool:
-    return username in load_allowed_users()
+    """检查用户是否在白名单。从 db 查询 allowed 字段。"""
+    from . import db
+    return db.is_allowed(username)
 
 
 def create_token(username: str) -> str:

@@ -52,7 +52,11 @@ export default function TableShell({
   const [liveAnnounce, setLiveAnnounce] = useState("");
   const [showHandEnd, setShowHandEnd] = useState(false);
   const [handEndData, setHandEndData] = useState<HandEnd | null>(null);
+  // 聊天改为右下浮动窗:默认收起,点击展开。展开时记录已读数算未读红点。
+  const [chatOpen, setChatOpen] = useState(false);
+  const [readCount, setReadCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - readCount);
 
   const isMyTurn = currentTurn?.sid === mySid;
   const legalActions = privateState?.legal_actions ?? [];
@@ -124,10 +128,12 @@ export default function TableShell({
     return off;
   }, []);
 
-  // 滚动聊天到底部
+  // 展开时滚动聊天到底部（已读标记在打开按钮的 onClick 里处理，避免在 effect 里 setState）
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [chatMessages]);
+    if (chatOpen) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages, chatOpen]);
 
   // 行动日志变化时朗读（aria-live），延迟 setState 避免同步调用
   useEffect(() => {
@@ -168,8 +174,8 @@ export default function TableShell({
       </header>
 
       <div className="flex flex-1">
-        {/* 中央 board 区 */}
-        <main className="relative flex-1 p-6">
+        {/* 中央 board 区（占满全宽,聊天改为右下浮窗不再挤占横向空间） */}
+        <main className="relative flex-1 p-3">
           {/* 开始游戏入口（仅未开局时） */}
           {notStarted && (
             <div className="mb-4 flex items-center justify-center">
@@ -246,42 +252,71 @@ export default function TableShell({
             </div>
           )}
         </main>
+      </div>
 
-        {/* 右侧聊天 */}
-        <aside className="w-64 border-l border-rim/30 bg-base/60 p-4 backdrop-blur-sm">
-          <h3 className="mb-3 text-sm font-medium text-text-hi">
-            {zhCN.table.chat}
-          </h3>
-          <div className="mb-3 h-64 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs">
-            {chatMessages.length === 0 ? (
-              <p className="text-text-lo/50">暂无消息</p>
-            ) : (
-              chatMessages.map((m, i) => (
-                <div key={i} className="mb-2">
-                  <span className="font-medium text-gold">{m.name}</span>
-                  <span className="ml-1 text-text-hi">{m.text}</span>
-                </div>
-              ))
-            )}
-            <div ref={chatEndRef} />
+      {/* 右下浮动聊天窗（收起=圆形按钮 + 未读红点;展开=半透明小窗） */}
+      <div className="fixed bottom-28 right-4 z-40 flex flex-col items-end">
+        {chatOpen && (
+          <div className="mb-2 w-72 rounded-panel border border-gold/30 bg-base/85 p-3 shadow-elev backdrop-blur-md">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-text-hi">
+                {zhCN.table.chat}
+              </h3>
+              <button
+                onClick={() => setChatOpen(false)}
+                className="text-text-lo transition hover:text-text-hi"
+                aria-label="收起聊天"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="mb-3 h-56 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs">
+              {chatMessages.length === 0 ? (
+                <p className="text-text-lo/50">暂无消息</p>
+              ) : (
+                chatMessages.map((m, i) => (
+                  <div key={i} className="mb-2">
+                    <span className="font-medium text-gold">{m.name}</span>
+                    <span className="ml-1 text-text-hi">{m.text}</span>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleChat()}
+                placeholder={zhCN.table.chatPlaceholder}
+                className="flex-1 rounded-card border border-rim bg-base px-2 py-1 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none"
+              />
+              <button
+                onClick={handleChat}
+                className="rounded-card bg-gold px-3 text-sm font-bold text-base transition hover:bg-gold-soft"
+              >
+                ↑
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={chatText}
-              onChange={(e) => setChatText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleChat()}
-              placeholder={zhCN.table.chatPlaceholder}
-              className="flex-1 rounded-card border border-rim bg-base px-2 py-1 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none"
-            />
-            <button
-              onClick={handleChat}
-              className="rounded-card bg-gold px-3 text-sm font-bold text-base transition hover:bg-gold-soft"
-            >
-              ↑
-            </button>
-          </div>
-        </aside>
+        )}
+        <button
+          onClick={() => {
+            // 任意切换都把当前消息标记已读(展开看 / 收起前都已读),清空红点
+            setReadCount(chatMessages.length);
+            setChatOpen((v) => !v);
+          }}
+          className="relative flex h-12 w-12 items-center justify-center rounded-full border border-gold/40 bg-base/90 text-xl shadow-elev backdrop-blur-md transition hover:border-gold/70"
+          aria-label={chatOpen ? "收起聊天" : "打开聊天"}
+        >
+          💬
+          {unread > 0 && (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-danger px-1 text-xs font-bold text-text-hi">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* 底部行动条（常驻，非我回合时透明隐藏） */}

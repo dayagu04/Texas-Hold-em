@@ -30,23 +30,18 @@ export default function SeatCard({
   const statusLabel = player.status !== "active" ? zhCN.playerStatus[player.status] : "";
   const isWinner = player.status === "won";
 
-  // 计时环：计算剩余时间百分比
-  const [timeLeft, setTimeLeft] = useState(100); // 0-100%
+  // 计时环：用 now 心跳(仅在 interval 回调里 setState,不在 effect 体内同步调用),
+  // timeLeft 在渲染期从 deadline 派生,规避 react-hooks/set-state-in-effect。
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!isCurrentTurn || !deadline) {
-      setTimeLeft(100);
-      return;
-    }
-    const updateTimer = () => {
-      const now = Date.now();
-      const total = 30000; // 30s 总时长（与后端 TURN_TIMEOUT 对齐）
-      const remaining = Math.max(0, deadline - now);
-      setTimeLeft((remaining / total) * 100);
-    };
-    updateTimer();
-    const interval = setInterval(updateTimer, 100); // 每 100ms 更新一次
-    return () => clearInterval(interval);
+    if (!isCurrentTurn || !deadline) return;
+    const id = setInterval(() => setNow(Date.now()), 100); // 每 100ms 更新一次
+    return () => clearInterval(id);
   }, [isCurrentTurn, deadline]);
+  const timeLeft =
+    isCurrentTurn && deadline
+      ? Math.max(0, Math.min(100, ((deadline - now) / 30000) * 100)) // 30s 总时长(与后端 TURN_TIMEOUT 对齐)
+      : 100;
 
   return (
     <div

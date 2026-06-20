@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS users (
     hands_played INTEGER NOT NULL DEFAULT 0,
     hands_won INTEGER NOT NULL DEFAULT 0,
     total_net INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT
+    created_at TEXT,
+    allowed INTEGER NOT NULL DEFAULT 1,
+    is_admin INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS hands (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,6 +66,10 @@ CREATE TABLE IF NOT EXISTS hand_players (
     PRIMARY KEY (hand_id, name),
     FOREIGN KEY (hand_id) REFERENCES hands(id)
 );
+CREATE TABLE IF NOT EXISTS meta (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_hp_name ON hand_players(name);
 """
 
@@ -75,10 +81,20 @@ def init_db():
         try:
             conn.execute("PRAGMA journal_mode = WAL")
             conn.executescript(SCHEMA)
+            # 旧库 ALTER 兜底：加 allowed / is_admin 列
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN allowed INTEGER NOT NULL DEFAULT 1")
+            except sqlite3.OperationalError:
+                pass  # 列已存在
+            try:
+                conn.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass
             conn.commit()
         finally:
             conn.close()
     _migrate_json_once()
+    _migrate_whitelist_once()
 
 
 def _migrate_json_once():
@@ -106,6 +122,60 @@ def _migrate_json_once():
         existing_path, _ = get_avatar(name)
         if not existing_path:
             set_avatar(name, avatar)
+
+
+def _migrate_whitelist_once():
+    """若 allowed_users.json 存在且未迁移过，将白名单导入 users 表并标记首个用户为管理员。"""
+    json_path = Path(__file__).parent.parent / "allowed_users.json"
+    if not json_path.exists():
+        return
+
+    # 检查迁移标记
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT value FROM meta WHERE key = ?", ("whitelist_migrated",)).fetchone()
+        if row and row["value"] == "1":
+            return  # 已迁移过
+    except sqlite3.OperationalError:
+        # meta 表可能还不存在（老数据库），创建后再试
+        pass
+    finally:
+        conn.close()
+
+    try:
+        import json
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        names = data.get("allowed_users", [])
+        if not names:
+            return
+    except Exception:
+        return
+
+    with _write_lock:
+        conn = _connect()
+        try:
+            for i, name in enumerate(names):
+                name = name.strip()
+                if not name:
+                    continue
+                # upsert 用户，设置 allowed=1
+                conn.execute(
+                    "INSERT OR IGNORE INTO users (name, points, created_at, allowed, is_admin) "
+                    "VALUES (?, 1000, ?, 1, 0)",
+                    (name, _now()),
+                )
+                # 首个用户设为 admin
+                if i == 0:
+                    conn.execute("UPDATE users SET allowed = 1, is_admin = 1 WHERE name = ?", (name,))
+                else:
+                    conn.execute("UPDATE users SET allowed = 1 WHERE name = ?", (name,))
+            # 写迁移标记
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", ("whitelist_migrated", "1"))
+            conn.commit()
+        finally:
+            conn.close()
+
 
 
 # ---- 用户 ----
@@ -168,6 +238,57 @@ def get_avatar(name: str) -> tuple[str | None, int]:
         return row["avatar"], row["avatar_version"]
     finally:
         conn.close()
+
+
+# ---- 白名单管理 ----
+
+def is_allowed(name: str) -> bool:
+    """检查用户是否在白名单（allowed=1）。"""
+    row = get_user(name)
+    return bool(row and row.get("allowed"))
+
+
+def is_admin(name: str) -> bool:
+    """检查用户是否管理员（is_admin=1）。"""
+    row = get_user(name)
+    return bool(row and row.get("is_admin"))
+
+
+def list_whitelist() -> list[dict]:
+    """返回所有白名单用户（allowed=1），含 name/allowed/is_admin/created_at/points。"""
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT name, allowed, is_admin, created_at, points FROM users WHERE allowed = 1"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def set_allowed(name: str, allowed: bool, is_admin: bool | None = None) -> dict:
+    """设置用户白名单状态，可选地更新 is_admin。返回更新后的用户字典。"""
+    name = name.strip()
+    if not name:
+        raise ValueError("name 不能为空")
+    with _write_lock:
+        conn = _connect()
+        try:
+            # upsert 用户
+            conn.execute(
+                "INSERT OR IGNORE INTO users (name, points, created_at, allowed, is_admin) "
+                "VALUES (?, 1000, ?, ?, 0)",
+                (name, _now(), 1 if allowed else 0),
+            )
+            # 更新 allowed
+            conn.execute("UPDATE users SET allowed = ? WHERE name = ?", (1 if allowed else 0, name))
+            # 可选地更新 is_admin
+            if is_admin is not None:
+                conn.execute("UPDATE users SET is_admin = ? WHERE name = ?", (1 if is_admin else 0, name))
+            conn.commit()
+        finally:
+            conn.close()
+    return get_user(name)
 
 
 # ---- 对局 ----

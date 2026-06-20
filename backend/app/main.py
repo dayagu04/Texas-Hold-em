@@ -68,6 +68,7 @@ def me(authorization: str = Header(None)):
         "expires_at": payload.get("exp"),
         "avatar": avatar,
         "points": user["points"],
+        "is_admin": db.is_admin(payload["name"]),
     }
 
 
@@ -90,6 +91,15 @@ def get_current_user(authorization: str = Header(None)) -> str:
             "error": {"code": "INVALID_TOKEN", "message": "token 无效或已过期"}
         })
     return payload["name"]
+
+
+def get_current_admin(username: str = Depends(get_current_user)) -> str:
+    """依赖函数：要求当前用户是管理员（is_admin=1），否则 403。"""
+    if not db.is_admin(username):
+        raise HTTPException(status_code=403, detail={
+            "error": {"code": "FORBIDDEN", "message": "需要管理员权限"}
+        })
+    return username
 
 
 @app.post("/api/profile/avatar")
@@ -148,6 +158,71 @@ def profile_history(limit: int = 20, username: str = Depends(get_current_user)):
     limit = max(1, min(int(limit), 50))
     return {"history": db.get_history(username, limit)}
 
+
+# ---- 白名单管理接口（仅 admin）----
+
+@app.get("/api/admin/whitelist")
+def admin_list_whitelist(username: str = Depends(get_current_admin)):
+    """列出所有白名单用户（allowed=1），含 name/allowed/is_admin/created_at/points。"""
+    users = db.list_whitelist()
+    return {
+        "users": [
+            {
+                "name": u["name"],
+                "allowed": bool(u["allowed"]),
+                "is_admin": bool(u["is_admin"]),
+                "created_at": u.get("created_at"),
+                "points": u["points"],
+            }
+            for u in users
+        ]
+    }
+
+
+class AddWhitelistRequest(BaseModel):
+    name: str
+    is_admin: bool = False
+
+
+@app.post("/api/admin/whitelist")
+def admin_add_whitelist(req: AddWhitelistRequest, username: str = Depends(get_current_admin)):
+    """添加或重新启用白名单用户（幂等）。可选地设置 is_admin。"""
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={
+            "error": {"code": "INVALID_INPUT", "message": "name 不能为空"}
+        })
+    user = db.set_allowed(name, allowed=True, is_admin=req.is_admin)
+    return {
+        "user": {
+            "name": user["name"],
+            "allowed": bool(user["allowed"]),
+            "is_admin": bool(user["is_admin"]),
+            "created_at": user.get("created_at"),
+            "points": user["points"],
+        }
+    }
+
+
+@app.delete("/api/admin/whitelist/{name}")
+def admin_remove_whitelist(name: str, username: str = Depends(get_current_admin)):
+    """移除白名单用户（置 allowed=0），不删行（保留积分/历史）。不能移除自己。"""
+    name = name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail={
+            "error": {"code": "INVALID_INPUT", "message": "name 不能为空"}
+        })
+    if name == username:
+        raise HTTPException(status_code=400, detail={
+            "error": {"code": "INVALID_INPUT", "message": "不能移除自己"}
+        })
+    user = db.get_user(name)
+    if not user:
+        raise HTTPException(status_code=404, detail={
+            "error": {"code": "USER_NOT_FOUND", "message": "用户不存在"}
+        })
+    db.set_allowed(name, allowed=False)
+    return {"removed": name}
 
 
 @app.post("/api/lobby/cleanup")

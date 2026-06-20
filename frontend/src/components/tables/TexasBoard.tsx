@@ -2,9 +2,9 @@
  * 德州扑克 Board（docs/UI-DESIGN.md §7.2 TexasBoard）。
  * 中央椭圆桌 + 5 张公共牌居中 + pot 数字正下方 + side pots 小标签。
  * 玩家围坐（自己永远屏幕底部中央），显示 SeatCard + 底牌（摊牌时高亮）。
- * M3 骨架版：布局 + 状态渲染；M4 精修发牌动画 / 赢家光晕。
+ * 下注筹码朝底池方向(内侧)推放;每街结束筹码飞入中央底池(收池动画)。
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
 import CardSprite from "../CardSprite";
@@ -17,6 +17,14 @@ interface Props {
   state: TexasTableState;
   privateState: PrivateState | null;
   mySid: string;
+}
+
+/* 飞向底池的临时筹码(收池动画用)。 */
+interface FlyingChip {
+  id: string;
+  x: number; // 起点(下注区)table 坐标 %
+  y: number;
+  amount: number;
 }
 
 export default function TexasBoard({ state, privateState, mySid }: Props) {
@@ -36,13 +44,56 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
   const arranged =
     myIdx >= 0 ? [...players.slice(myIdx), ...players.slice(0, myIdx)] : players;
 
+  // 座位坐标(table 坐标系 %): i=0(自己)落在椭圆底部中央(angle=+π/2)。
+  const radiusX = 44;
+  const radiusY = 38;
+  const seatLayout = arranged.map((p, i) => {
+    const angle = (i / arranged.length) * 2 * Math.PI + Math.PI / 2;
+    const x = 50 + radiusX * Math.cos(angle);
+    const y = 50 + radiusY * Math.sin(angle);
+    return { p, i, angle, x, y };
+  });
+  // 下注区: 座位与底池中心连线上、靠近底池的点(0.52 ≈ 一半略偏内)。
+  const betPos = (x: number, y: number) => ({
+    x: 50 + (x - 50) * 0.52,
+    y: 50 + (y - 50) * 0.52,
+  });
+
+  // 收池动画: 追踪上一帧各家下注;某街结束(总下注由 >0 归零)时,
+  // 从各家下注区生成飞向底池的临时筹码。
+  const [flying, setFlying] = useState<FlyingChip[]>([]);
+  const prevBets = useRef<Record<string, number>>(player_bets);
+  useEffect(() => {
+    const prev = prevBets.current;
+    const prevTotal = Object.values(prev).reduce((a, b) => a + b, 0);
+    const curTotal = Object.values(player_bets).reduce((a, b) => a + b, 0);
+    if (prevTotal > 0 && curTotal === 0) {
+      const chips: FlyingChip[] = Object.entries(prev)
+        .filter(([, amt]) => amt > 0)
+        .map(([sid, amt]) => {
+          const seat = seatLayout.find((s) => s.p.sid === sid);
+          const base = seat ? betPos(seat.x, seat.y) : { x: 50, y: 50 };
+          return { id: `${hand_id}-${sid}-${prevTotal}`, x: base.x, y: base.y, amount: amt };
+        });
+      if (chips.length) {
+        setFlying(chips);
+        const t = setTimeout(() => setFlying([]), 650);
+        prevBets.current = player_bets;
+        return () => clearTimeout(t);
+      }
+    }
+    prevBets.current = player_bets;
+    // seatLayout/betPos 由 players+mySid 派生,player_bets 变化即覆盖,无需额外依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player_bets, hand_id]);
+
   const stageText = zhCN.stage[stage] ?? stage;
 
   return (
     <div className="relative h-full">
-      {/* 椭圆桌面：多层材质叠加 + 立体桌沿 */}
+      {/* 椭圆桌面：多层材质叠加 + 立体桌沿。inset 收窄让桌面占满主区。 */}
       <div
-        className="absolute inset-10 rounded-[50%] bg-felt"
+        className="absolute inset-x-4 inset-y-3 rounded-[50%] bg-felt"
         style={{
           boxShadow: `
             inset 0 0 0 1px var(--table-edge-inner),
@@ -126,19 +177,9 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
         </div>
 
         {/* 玩家（围坐） */}
-        {arranged.map((p, i) => {
-          const angle = (i / arranged.length) * 2 * Math.PI - Math.PI / 2;
-          const radiusX = 42;
-          const radiusY = 32;
-          const x = 50 + radiusX * Math.cos(angle);
-          const y = 50 + radiusY * Math.sin(angle);
+        {seatLayout.map(({ p, x, y }) => {
           const isMe = p.sid === mySid;
           const isCurrentTurn = current_turn?.sid === p.sid;
-          const bet = player_bets[p.sid] ?? 0;
-
-          // 下注筹码外推向量：沿远离中心方向偏移,避免侵入底池区
-          const betOutwardX = Math.cos(angle) * 10; // 10% 外推距离
-          const betOutwardY = Math.sin(angle) * 10;
 
           // 底牌：自己从 privateState 取，摊牌时从 state 取（暂简化）
           let hole: Card[] = [];
@@ -152,12 +193,11 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
             >
               <SeatCard
                 player={p}
-                currentBet={bet}
                 isCurrentTurn={isCurrentTurn}
                 isMe={isMe}
                 deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined}
               />
-              {/* 底牌（自己 / 摊牌）— M4 发牌动画：hand_id 变化触发错峰飞入 */}
+              {/* 底牌（自己 / 摊牌）— 朝屏幕下沿展开,不侵入底池 */}
               {hole.length > 0 && (
                 <div className="mt-2 flex justify-center gap-1">
                   {hole.map((c, j) => (
@@ -176,35 +216,62 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
               {p.seat === button_seat && (
                 <DealerButton className="absolute -top-2 -left-2" />
               )}
-              {/* 当前轮下注筹码 — M4 筹码外推(朝外不侵入中心)+ 抛入动画 + 加注金色脉冲 */}
-              <AnimatePresence mode="wait">
-                {bet > 0 && (
-                  <motion.div
-                    key={`bet-${p.sid}-${bet}`}
-                    initial={{ y: -30, opacity: 0, scale: 0.6, rotate: -10 }}
-                    animate={{ y: 0, opacity: 1, scale: 1, rotate: 0 }}
-                    exit={{ y: -25, opacity: 0, scale: 0.75 }}
-                    transition={{
-                      duration: 0.45,
-                      ease: [0.2, 0.8, 0.3, 1],
-                      opacity: { duration: 0.3 },
-                    }}
-                    className="absolute flex items-center gap-2 rounded-full border border-gold/70 bg-base/95 px-3 py-1.5 text-xs font-bold text-gold shadow-[0_0_0_rgba(231,200,122,0),var(--shadow-chip)] backdrop-blur-sm animate-[raisePulse_560ms_ease-out]"
-                    style={{
-                      fontFamily: "var(--font-mono)",
-                      left: `calc(50% + ${betOutwardX}%)`,
-                      top: `calc(50% + ${betOutwardY}%)`,
-                      transform: "translate(-50%, -50%)",
-                    }}
-                  >
-                    <ChipStack amount={bet} size={15} />
-                    <span>{bet}</span>
-                  </motion.div>
-                )}
-              </AnimatePresence>
             </div>
           );
         })}
+
+        {/* 下注筹码层(table 坐标,朝底池方向内推)— 抛入动画。
+            定位(left/top + 居中)放外层静态 div;动画留给内层 motion.div,
+            避免 motion 的 transform(y/scale)覆盖居中用的 translate(-50%,-50%)。 */}
+        {seatLayout.map(({ p, x, y }) => {
+          const bet = player_bets[p.sid] ?? 0;
+          if (bet <= 0) return null;
+          const { x: bx, y: by } = betPos(x, y);
+          return (
+            <div
+              key={`bet-wrap-${p.sid}`}
+              className="absolute z-10"
+              style={{
+                left: `${bx}%`,
+                top: `${by}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <motion.div
+                key={`bet-${p.sid}-${bet}`}
+                initial={{ opacity: 0, scale: 0.6, y: -22 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: 0.42, ease: [0.2, 0.8, 0.3, 1] }}
+                className="flex items-center gap-1.5 rounded-full border border-gold/70 bg-base/95 px-2.5 py-1 text-xs font-bold text-gold backdrop-blur-sm"
+                style={{
+                  fontFamily: "var(--font-mono)",
+                  boxShadow: "var(--shadow-chip)",
+                }}
+              >
+                <ChipStack amount={bet} size={14} />
+                <span>{bet}</span>
+              </motion.div>
+            </div>
+          );
+        })}
+
+        {/* 收池动画: 各家下注飞向中央底池后淡出。
+            居中用 motion 自己的 x/y:"-50%"(与 scale 同属 transform,motion 会正确合成),
+            不要在 style 里写 translate,否则被 scale 覆盖。 */}
+        <AnimatePresence>
+          {flying.map((c) => (
+            <motion.div
+              key={c.id}
+              className="absolute z-20 flex items-center gap-1.5 rounded-full border border-gold/60 bg-base/90 px-2 py-1 text-xs font-bold text-gold"
+              initial={{ left: `${c.x}%`, top: `${c.y}%`, x: "-50%", y: "-50%", opacity: 1, scale: 1 }}
+              animate={{ left: "50%", top: "46%", x: "-50%", y: "-50%", opacity: 0, scale: 0.65 }}
+              transition={{ duration: 0.6, ease: "easeIn" }}
+              style={{ fontFamily: "var(--font-mono)" }}
+            >
+              <ChipStack amount={c.amount} size={13} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
   );

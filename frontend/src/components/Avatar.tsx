@@ -4,7 +4,7 @@
  * 统一 object-cover object-top + 圆形 + 尺寸 prop，供 SeatCard / ProfilePage /
  * GameSelection / Lobby 共用，避免各处重复 onError 兜底逻辑。
  */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface Props {
   src?: string | null;
@@ -22,11 +22,13 @@ export default function Avatar({
   fallbackClassName = "",
 }: Props) {
   const [failed, setFailed] = useState(false);
-
-  // src 变化时重置失败态（如上传新头像后）。
-  useEffect(() => {
+  // src 变化时重置失败态（如上传新头像后）。用"渲染期校正 state"模式,
+  // 避免在 effect 里同步 setState（react-hooks/set-state-in-effect）。
+  const [trackedSrc, setTrackedSrc] = useState(src);
+  if (src !== trackedSrc) {
+    setTrackedSrc(src);
     setFailed(false);
-  }, [src]);
+  }
 
   const initial = name?.[0]?.toUpperCase() ?? "?";
   const showImg = src && !failed;

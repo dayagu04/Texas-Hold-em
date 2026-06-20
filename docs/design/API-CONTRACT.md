@@ -52,6 +52,84 @@ GET /api/lobby   Authorization: Bearer <token>
 }
 ```
 
+### 1.5 白名单管理（仅 admin）
+
+> 配合 #008，白名单从 `allowed_users.json` 迁入 SQLite `users` 表（见 §1.6）。以下接口让管理员在线增删白名单，无需改 JSON 重启。
+
+所有接口都走 `Authorization: Bearer <token>` 鉴权，并额外要求调用者 `is_admin = true`。**非 admin 一律返回 403** `{ "error": { "code": "FORBIDDEN", "message": "需要管理员权限" } }`。
+
+```
+GET /api/admin/whitelist        Authorization: Bearer <token>(admin)
+200 → { "users": WhitelistUser[] }
+403 → FORBIDDEN
+
+WhitelistUser = {
+  name: string;
+  allowed: boolean;     // 是否在白名单（可登录）
+  is_admin: boolean;
+  created_at: string | null;  // ISO 8601 UTC
+  points: number;       // 顺带回带，admin 页可展示
+}
+```
+
+```
+POST /api/admin/whitelist       Authorization: Bearer <token>(admin)
+Body: { "name": "Bob", "is_admin"?: false }   // is_admin 缺省 false
+200 → { "user": WhitelistUser }               // 新增或将已存在用户重新置为 allowed
+400 → { "error": { "code": "INVALID_INPUT", "message": "name 不能为空" } }
+403 → FORBIDDEN
+```
+- 幂等：name 已存在则把 `allowed` 置 true（不报错），可选地更新 `is_admin`。
+- name 两端空白由服务端 strip。
+
+```
+DELETE /api/admin/whitelist/{name}   Authorization: Bearer <token>(admin)
+200 → { "removed": "Bob" }
+400 → { "error": { "code": "INVALID_INPUT", "message": "不能移除自己" } }
+403 → FORBIDDEN
+404 → { "error": { "code": "USER_NOT_FOUND", "message": "用户不存在" } }
+```
+- **不删行**，只把 `allowed` 置 false（保留积分/对局历史）。被移除者已签发的 token 在过期前仍有效，但无法再次登录。
+- 不能移除自己（`name == 当前 admin`）；不建议移除最后一个 admin（前端禁用按钮即可，服务端可不强校验）。
+
+### 1.6 用户表新增字段（`users`）
+
+配合 #008，`users` 表新增两列：
+
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `allowed` | INTEGER(0/1) | 1 | 是否在白名单。登录时校验此字段，取代旧的 `allowed_users.json` 读取。 |
+| `is_admin` | INTEGER(0/1) | 0 | 是否管理员。仅 admin 可调 §1.5 接口。 |
+
+迁移规则（首次启动）：读 `allowed_users.json`，为每个名字 upsert 一行并置 `allowed=1`；**列表中第一个用户置 `is_admin=1`** 作为初始管理员。迁移完成后 JSON 不再被读取（保留作备份）。
+
+`GET /api/me` 响应同步新增 `is_admin: boolean` 字段，前端据此决定是否显示「白名单管理」入口。
+
+### 1.7 积分榜（#011）
+
+```
+GET /api/leaderboard?metric=points|net|winrate&limit=10
+Authorization: Bearer <token>
+200 → { "metric": "points", "entries": LeaderboardEntry[] }
+```
+- `metric` 缺省 `points`；非法值回退 `points`。
+- `limit` 缺省 10，范围 1..50（服务端 clamp）。
+- 仅统计真人（`is_bot` 不入 users 表，天然排除）；`winrate` 需 `hands_played >= 10` 才入榜（样本太小不参与排名），不足者过滤掉。
+
+```ts
+LeaderboardEntry = {
+  rank: number;          // 1-based，并列时同名次（可选，简单实现按行号即可）
+  name: string;
+  avatar: string | null; // 裸路径，前端自行拼 ?v=
+  points: number;
+  hands_played: number;
+  hands_won: number;
+  total_net: number;
+  winrate: number;       // hands_won / hands_played，0..1，两位小数
+}
+```
+- 排序键：`points` → points DESC；`net` → total_net DESC；`winrate` → winrate DESC。
+
 ---
 
 ## 2. Socket.IO
@@ -74,8 +152,10 @@ GET /api/lobby   Authorization: Bearer <token>
 | C→S | `lobby:create_table` | `CreateTablePayload` | 创建并自动入座 0 |
 | C→S | `lobby:join_table` | `{ table_id, seat?: number, spectate?: boolean }` | seat 不传则自动选最小空位 |
 | C→S | `lobby:leave_table` | `{ table_id }` | 离桌（不退出大厅） |
+| C→S | `lobby:quick_match` | `{ game_type }` | 快速匹配（#009）：服务端挑一个 `status=waiting && 未满` 的最近房间并自动入座最小空位 |
 | S→C | `lobby:update` | `{ tables: LobbyTable[] }` | 任意房间变化时广播 |
-| S→C | `lobby:joined` | `{ table_id, your_seat: number \| null }` | 加入成功回执 |
+| S→C | `lobby:joined` | `{ table_id, your_seat: number \| null }` | 加入成功回执（含 quick_match 命中后的回执） |
+| S→C | `lobby:no_match` | `{ game_type }` | quick_match 找不到可入座房间时回执，前端据此引导用户去创建 |
 
 `CreateTablePayload`:
 ```ts
@@ -102,7 +182,11 @@ GET /api/lobby   Authorization: Bearer <token>
   game_type: "texas" | "guandan" | "brag";
   hand_id: string;          // 每开新一局递增
   stage: string;            // 各玩法语义见下
-  current_turn: { sid: string; deadline: string } | null;
+  current_turn: {
+    sid: string;
+    deadline: string;       // ISO 8601 UTC，回合超时的绝对时刻
+    turn_total_ms: number;  // 本回合总时长（毫秒）。前端用 (deadline - now) / turn_total_ms 画倒计时进度环，无需自己假设总时长
+  } | null;
   players: PublicPlayer[];
   payload: TexasPublic | GuandanPublic | BragPublic;  // 玩法专属字段
   log: ActionLog[];         // 最近 20 条（rolling）
@@ -140,9 +224,19 @@ LegalAction = { action: string; payload_schema?: Record<string, "int" | "card[]"
 
 #### C→S: `table:chat`
 ```ts
-{ table_id: string; text: string }   // 长度 ≤ 200
+{ table_id: string; text: string }   // 长度 ≤ 200，空串/超长被服务端静默丢弃
 ```
-S→C: `table:chat` `{ sid, name, text, ts }`
+S→C: `table:chat`
+```ts
+{
+  sid: string;
+  name: string;
+  text: string;
+  ts: number;   // Unix 毫秒时间戳（服务端 emit 时刻），前端据此显示发送时间。
+                // 注意：是 number（毫秒整数），不是 §0 约定的 ISO 字符串——聊天高频且只用于本地展示，用毫秒整数最省事。
+}
+```
+> ⚠️ 历史实现里 `ts` 曾下发空串 `""`（占位 TODO）。本契约把它定为 Unix 毫秒整数；后端须改为 `int(time.time() * 1000)`，前端按 number 解析（兼容旧空串时回退为收到的本地时间）。
 
 #### C→S: `table:add_bot` / `table:remove_bot`
 ```ts
@@ -251,7 +345,7 @@ remove_bot: { table_id, seat }
 | S→C | `system:announce` `{ text }` | 维护通知（v1 可不发） |
 
 `error.code` 枚举：
-`AUTH_REQUIRED | NOT_ALLOWED | INVALID_TOKEN | TABLE_NOT_FOUND | SEAT_TAKEN | FORBIDDEN | INVALID_ACTION | OUT_OF_TURN | RULE_VIOLATION`
+`AUTH_REQUIRED | NOT_ALLOWED | INVALID_TOKEN | TABLE_NOT_FOUND | SEAT_TAKEN | FORBIDDEN | INVALID_ACTION | OUT_OF_TURN | RULE_VIOLATION | INVALID_INPUT | USER_NOT_FOUND | NO_MATCH`
 
 ---
 
