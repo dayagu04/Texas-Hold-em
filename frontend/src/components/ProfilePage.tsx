@@ -75,6 +75,7 @@ export default function ProfilePage() {
   const isAdmin = meData?.is_admin ?? false;
 
   useEffect(() => {
+    api
       .getStats()
       .then(setStats)
       .catch(() => setStats(null));

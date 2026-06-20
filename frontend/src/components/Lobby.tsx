@@ -13,7 +13,6 @@ import { useMe } from "../hooks/useMe";
 import { useAuth } from "../auth";
 import { connectSocket } from "../socket";
 import { zhCN } from "../i18n/zh-CN";
-import * as api from "../api";
 import CreateTableModal from "./CreateTableModal";
 import ReconnectBanner from "./ReconnectBanner";
 import Avatar from "./Avatar";
