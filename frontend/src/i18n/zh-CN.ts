@@ -20,6 +20,8 @@ export const zhCN = {
     reconnecting: "正在重连…",
     spectate: "观战",
     sit: "入座",
+    errorBoundary: "出了点问题",
+    reloadPage: "点击重新加载",
   },
 
   login: {
