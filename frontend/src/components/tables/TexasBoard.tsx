@@ -11,7 +11,7 @@ import CardSprite from "../CardSprite";
 import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
 import DealerButton from "../DealerButton";
-import type { Card, PrivateState, TexasTableState } from "../../types";
+import type { Card, CurrentTurn, PrivateState, PublicPlayer, TexasTableState } from "../../types";
 
 interface Props {
   state: TexasTableState;
@@ -89,6 +89,74 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
 
   const stageText = zhCN.stage[stage] ?? stage;
 
+  return (
+    <div className="relative h-full">
+      {/* 桌面布局：桌面端椭圆桌 / 移动端纵向堆叠 */}
+      <div className="hidden h-full md:block">
+        <DesktopTable
+          seatLayout={seatLayout}
+          pot={pot}
+          side_pots={side_pots}
+          community={community}
+          stageText={stageText}
+          hand_id={hand_id}
+          button_seat={button_seat}
+          player_bets={player_bets}
+          current_turn={current_turn}
+          privateState={privateState}
+          mySid={mySid}
+          betPos={betPos}
+          flying={flying}
+        />
+      </div>
+
+      <div className="block h-full md:hidden">
+        <MobileTable
+          arranged={arranged}
+          pot={pot}
+          community={community}
+          stageText={stageText}
+          hand_id={hand_id}
+          button_seat={button_seat}
+          player_bets={player_bets}
+          current_turn={current_turn}
+          privateState={privateState}
+        />
+      </div>
+    </div>
+  );
+}
+
+/* 桌面端椭圆桌布局 */
+function DesktopTable({
+  seatLayout,
+  pot,
+  side_pots,
+  community,
+  stageText,
+  hand_id,
+  button_seat,
+  player_bets,
+  current_turn,
+  privateState,
+  mySid,
+  betPos,
+  flying,
+}: {
+  seatLayout: Array<{ p: PublicPlayer; i: number; angle: number; x: number; y: number }>;
+  pot: number;
+  side_pots: { amount: number; eligible_sids: string[] }[];
+  community: Card[];
+  stageText: string;
+  hand_id: string;
+  button_seat: number;
+  player_bets: Record<string, number>;
+  current_turn: CurrentTurn | null;
+  privateState: PrivateState | null;
+  mySid: string;
+  betPos: (x: number, y: number) => { x: number; y: number };
+  flying: FlyingChip[];
+}) {
   return (
     <div className="relative h-full">
       {/* 椭圆桌面：多层材质叠加 + 立体桌沿。inset 收窄让桌面占满主区。 */}
@@ -272,6 +340,140 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
             </motion.div>
           ))}
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+/* 移动端纵向堆叠布局 (#012) */
+function MobileTable({
+  arranged,
+  pot,
+  community,
+  stageText,
+  hand_id,
+  button_seat,
+  player_bets,
+  current_turn,
+  privateState,
+}: {
+  arranged: PublicPlayer[];
+  pot: number;
+  community: Card[];
+  stageText: string;
+  hand_id: string;
+  button_seat: number;
+  player_bets: Record<string, number>;
+  current_turn: CurrentTurn | null;
+  privateState: PrivateState | null;
+}) {
+  const me = arranged[0]; // 自己永远第一个（底部）
+  const opponents = arranged.slice(1); // 其余玩家（顶部横排）
+
+  const myHole = privateState?.hole ?? [];
+  const myBet = player_bets[me.sid] ?? 0;
+  const isMyTurn = current_turn?.sid === me.sid;
+
+  return (
+    <div className="flex h-full flex-col bg-felt p-2">
+      {/* 顶部：对手横排（横滑） */}
+      <div className="mb-2 overflow-x-auto">
+        <div className="flex gap-2 pb-1">
+          {opponents.map((p) => {
+            const isCurrentTurn = current_turn?.sid === p.sid;
+            const bet = player_bets[p.sid] ?? 0;
+            return (
+              <div key={p.sid} className="relative flex-shrink-0">
+                <div className="w-20">
+                  <SeatCard
+                    player={p}
+                    isCurrentTurn={isCurrentTurn}
+                    isMe={false}
+                    deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined}
+                  />
+                  {p.seat === button_seat && (
+                    <DealerButton className="absolute -top-1 -left-1 scale-75" />
+                  )}
+                </div>
+                {bet > 0 && (
+                  <div className="mt-1 rounded border border-gold/50 bg-base/90 px-1.5 py-0.5 text-center text-xs font-bold text-gold">
+                    {bet}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 中央：公共牌 + pot + 阶段 */}
+      <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        <div className="rounded-panel border border-gold/60 bg-base/85 px-4 py-2 text-center backdrop-blur-sm">
+          <div className="text-xs text-text-lo">{zhCN.table.pot}</div>
+          <div className="text-2xl font-bold text-gold" style={{ fontFamily: "var(--font-mono)" }}>
+            {pot}
+          </div>
+        </div>
+
+        {community.length > 0 && (
+          <div className="flex gap-2">
+            {community.map((c, i) => (
+              <motion.div
+                key={`${hand_id}-comm-${i}`}
+                initial={{ rotateY: -90, opacity: 0 }}
+                animate={{ rotateY: 0, opacity: 1 }}
+                transition={{ duration: 0.36, delay: i * 0.12, ease: "easeOut" }}
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                <CardSprite card={c} className="h-16 w-12" />
+              </motion.div>
+            ))}
+          </div>
+        )}
+
+        <div className="rounded-full border border-gold/70 bg-base/70 px-4 py-1 text-xs font-semibold text-gold backdrop-blur-sm">
+          {stageText}
+        </div>
+      </div>
+
+      {/* 底部：自己的座位 + 手牌 */}
+      <div className="mt-2">
+        <div className="flex items-center justify-between gap-2 rounded-card border border-gold/30 bg-elev/80 p-3 backdrop-blur-sm">
+          <div className="flex-1">
+            <div className="mb-1 text-sm font-bold text-text-hi">{me.name}</div>
+            <div className="text-xs text-text-lo">
+              筹码 <span className="font-semibold text-gold">{me.chips}</span>
+            </div>
+            {myBet > 0 && (
+              <div className="mt-1 text-xs text-gold">已下注 {myBet}</div>
+            )}
+          </div>
+
+          {myHole.length > 0 && (
+            <div className="flex gap-1.5">
+              {myHole.map((c, j) => (
+                <motion.div
+                  key={`${hand_id}-hole-${c.suit}${c.rank}`}
+                  initial={{ x: -30, scale: 0.8, opacity: 0 }}
+                  animate={{ x: 0, scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.22, delay: j * 0.08, ease: "easeOut" }}
+                >
+                  <CardSprite card={c} className="h-16 w-12" />
+                </motion.div>
+              ))}
+            </div>
+          )}
+
+          {me.seat === button_seat && (
+            <DealerButton className="absolute -top-1 -right-1 scale-90" />
+          )}
+        </div>
+
+        {isMyTurn && (
+          <div className="mt-2 rounded border border-gold/50 bg-gold/10 px-2 py-1 text-center text-xs text-gold">
+            轮到你了
+          </div>
+        )}
       </div>
     </div>
   );

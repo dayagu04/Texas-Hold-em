@@ -202,3 +202,30 @@ export interface LeaderboardEntry {
   total_net: number;
   winrate: number; // 0..1
 }
+
+/* ---- 牌局回放（GET /api/hand/{hand_id}/replay）#013 ---- */
+export interface ReplayData {
+  hand_id: number;
+  game_type: GameType;
+  board: string; // 公共牌 code 串，如 "AsKdQh"；无则空串
+  pot: number;
+  ended_at: string; // ISO 8601 UTC
+  players: ReplayPlayer[];
+  actions: ReplayAction[]; // 按 seq 升序；空数组表示该局无逐 action 记录
+}
+
+export interface ReplayPlayer {
+  name: string;
+  seat: number;
+  is_bot: boolean;
+  hole: string; // 起手牌 code 串，如 "AsKd"；掼蛋等无则空串
+}
+
+export interface ReplayAction {
+  seq: number; // 局内序号，从 0 起，唯一且递增
+  name: string; // 行动者展示名（sid 重连会变，回放用 name）
+  action: string; // fold|call|raise|check|all_in|play|pass|look|compare|...
+  payload: Record<string, unknown> | null; // 如 { amount: 50 } / { cards: ["As","Kd"] }
+  stage: string; // 动作发生时的 stage（preflop/flop/.../betting/play）
+  ts: string; // ISO 8601 UTC
+}

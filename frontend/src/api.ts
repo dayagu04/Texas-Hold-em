@@ -10,6 +10,7 @@ import type {
   LoginResponse,
   MeResponse,
   ProfileStats,
+  ReplayData,
   SocketError,
   WhitelistUser,
 } from "./types";
@@ -162,4 +163,12 @@ export function getLeaderboard(
     `/api/leaderboard?metric=${metric}&limit=${safeLimit}`,
     { method: "GET", auth: true },
   );
+}
+
+/** GET /api/hand/{hand_id}/replay - 获取牌局回放数据（#013） */
+export function getHandReplay(handId: string): Promise<ReplayData> {
+  return request<ReplayData>(`/api/hand/${handId}/replay`, {
+    method: "GET",
+    auth: true,
+  });
 }

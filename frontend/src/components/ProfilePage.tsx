@@ -4,12 +4,14 @@
  */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { useAuth } from "../auth";
 import { useMe } from "../hooks/useMe";
 import * as api from "../api";
 import { zhCN } from "../i18n/zh-CN";
 import Avatar from "./Avatar";
 import CardSprite from "./CardSprite";
+import ReplayModal from "./ReplayModal";
 import { parseCards } from "../utils/cards";
 import type {
   HandHistory,
@@ -64,6 +66,7 @@ export default function ProfilePage() {
   const [history, setHistory] = useState<HandHistory[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [myRank, setMyRank] = useState<number | null>(null);
+  const [replayHandId, setReplayHandId] = useState<string | null>(null);
 
   // 从 useMe 同步数据
   useEffect(() => {
@@ -288,12 +291,23 @@ export default function ProfilePage() {
                       [h.hand_id]: !prev[h.hand_id],
                     }))
                   }
+                  onReplay={() => setReplayHandId(h.hand_id)}
                 />
               ))}
             </div>
           )}
         </div>
       </main>
+
+      {/* 回放 Modal */}
+      <AnimatePresence>
+        {replayHandId && (
+          <ReplayModal
+            handId={replayHandId}
+            onClose={() => setReplayHandId(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -320,10 +334,12 @@ function HistoryCard({
   hand,
   expanded,
   onToggle,
+  onReplay,
 }: {
   hand: HandHistory;
   expanded: boolean;
   onToggle: () => void;
+  onReplay: () => void;
 }) {
   const myCards = parseCards(hand.me.hole);
   const boardCards = parseCards(hand.board);
@@ -359,6 +375,12 @@ function HistoryCard({
           >
             {netLabel(hand.me.net)}
           </span>
+          <button
+            onClick={onReplay}
+            className="rounded border border-gold/50 px-2 py-0.5 text-xs text-gold transition hover:bg-gold/10"
+          >
+            回放
+          </button>
         </div>
       </div>
 
