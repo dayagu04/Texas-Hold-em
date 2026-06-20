@@ -7,11 +7,12 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { zhCN } from "../../i18n/zh-CN";
+import { subscribe } from "../../socket";
 import CardSprite from "../CardSprite";
 import ChipStack from "../ChipStack";
 import SeatCard from "../SeatCard";
 import DealerButton from "../DealerButton";
-import type { Card, CurrentTurn, PrivateState, PublicPlayer, TexasTableState } from "../../types";
+import type { Card, CurrentTurn, PrivateState, PublicPlayer, TexasTableState, HandEnd } from "../../types";
 
 interface Props {
   state: TexasTableState;
@@ -27,8 +28,16 @@ interface FlyingChip {
   amount: number;
 }
 
+/* 飘字反馈（行动时座位上方浮现）*/
+interface FloatingText {
+  id: string;
+  sid: string;
+  text: string;
+  color: "gold" | "lo"; // gold=加注/看牌, lo=弃牌/过牌
+}
+
 export default function TexasBoard({ state, privateState, mySid }: Props) {
-  const { players, payload, current_turn, stage, hand_id } = state;
+  const { players, payload, current_turn, stage, hand_id, log } = state;
   const { pot, side_pots, community, button_seat, player_bets } = payload;
 
   // 发牌动画触发：hand_id 变化时重置 dealKey 以触发 framer-motion 重新挂载
@@ -87,6 +96,72 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player_bets, hand_id]);
 
+  // 飘字反馈：监听 log 最后一条，生成飘字
+  const [floatingTexts, setFloatingTexts] = useState<FloatingText[]>([]);
+  const prevLogLen = useRef(log.length);
+  useEffect(() => {
+    if (log.length > prevLogLen.current && log.length > 0) {
+      const latest = log[log.length - 1];
+      const actionName = latest.action;
+      const detail = latest.detail ?? "";
+
+      // 根据 action 生成飘字文本和颜色
+      let text = "";
+      let color: "gold" | "lo" = "gold";
+
+      if (actionName === "fold") {
+        text = "弃牌";
+        color = "lo";
+      } else if (actionName === "check") {
+        text = "过牌";
+        color = "lo";
+      } else if (actionName === "call") {
+        text = `跟注${detail ? " " + detail : ""}`;
+        color = "gold";
+      } else if (actionName === "raise") {
+        text = `加注${detail ? " " + detail : ""}`;
+        color = "gold";
+      } else if (actionName === "all_in") {
+        text = "ALL IN";
+        color = "gold";
+      } else if (actionName === "look") {
+        text = "看牌";
+        color = "gold";
+      }
+
+      if (text) {
+        const newText: FloatingText = {
+          id: `float-${latest.sid}-${Date.now()}`,
+          sid: latest.sid,
+          text,
+          color,
+        };
+        setFloatingTexts((prev) => [...prev, newText]);
+        const timer = setTimeout(() => {
+          setFloatingTexts((prev) => prev.filter((t) => t.id !== newText.id));
+        }, 1200);
+        return () => clearTimeout(timer);
+      }
+    }
+    prevLogLen.current = log.length;
+  }, [log]);
+
+  // 赢家演出：监听 hand_end 事件，记录赢家 sid
+  const [winnerSids, setWinnerSids] = useState<string[]>([]);
+  useEffect(() => {
+    const off = subscribe("table:hand_end", (data: HandEnd) => {
+      // 筛选出盈利玩家作为赢家
+      const winners = data.results
+        .filter((r: any) => "amount" in r && r.amount > 0)
+        .map((r: any) => r.sid);
+      setWinnerSids(winners);
+      // 3秒后清除赢家状态
+      const timer = setTimeout(() => setWinnerSids([]), 3000);
+      return () => clearTimeout(timer);
+    });
+    return off;
+  }, []);
+
   const stageText = zhCN.stage[stage] ?? stage;
 
   return (
@@ -107,6 +182,8 @@ export default function TexasBoard({ state, privateState, mySid }: Props) {
           mySid={mySid}
           betPos={betPos}
           flying={flying}
+          floatingTexts={floatingTexts}
+          winnerSids={winnerSids}
         />
       </div>
 
@@ -142,6 +219,8 @@ function DesktopTable({
   mySid,
   betPos,
   flying,
+  floatingTexts,
+  winnerSids,
 }: {
   seatLayout: Array<{ p: PublicPlayer; i: number; angle: number; x: number; y: number }>;
   pot: number;
@@ -156,6 +235,8 @@ function DesktopTable({
   mySid: string;
   betPos: (x: number, y: number) => { x: number; y: number };
   flying: FlyingChip[];
+  floatingTexts: FloatingText[];
+  winnerSids: string[];
 }) {
   return (
     <div className="relative h-full">
@@ -253,6 +334,7 @@ function DesktopTable({
         {seatLayout.map(({ p, x, y }) => {
           const isMe = p.sid === mySid;
           const isCurrentTurn = current_turn?.sid === p.sid;
+          const isWinner = winnerSids.includes(p.sid);
 
           // 底牌：自己从 privateState 取，摊牌时从 state 取（暂简化）
           let hole: Card[] = [];
@@ -264,25 +346,87 @@ function DesktopTable({
               className="absolute"
               style={{ left: `${x}%`, top: `${y}%`, transform: "translate(-50%, -50%)" }}
             >
+              {/* 赢家光柱效果 */}
+              {isWinner && (
+                <motion.div
+                  className="pointer-events-none absolute inset-0 -inset-x-8 -inset-y-8"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: [0, 1, 0.8, 0] }}
+                  transition={{ duration: 1.2, ease: "easeOut" }}
+                  style={{
+                    background: `
+                      radial-gradient(ellipse at center,
+                        rgba(201, 161, 74, 0.6) 0%,
+                        rgba(231, 200, 122, 0.4) 30%,
+                        transparent 70%)
+                    `,
+                    filter: "blur(8px)",
+                  }}
+                />
+              )}
+
+              {/* 赢家金币雨 */}
+              {isWinner && (
+                <div className="pointer-events-none absolute inset-0">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <motion.div
+                      key={`coin-${i}`}
+                      className="absolute h-3 w-3 rounded-full"
+                      style={{
+                        left: `${20 + Math.random() * 60}%`,
+                        top: "-40px",
+                        background: "radial-gradient(circle, var(--gold) 0%, var(--gold-soft) 100%)",
+                        boxShadow: "0 0 8px rgba(201, 161, 74, 0.8)",
+                      }}
+                      initial={{ y: 0, opacity: 1, scale: 0.5 }}
+                      animate={{
+                        y: [0, 100 + Math.random() * 60],
+                        opacity: [1, 1, 0],
+                        scale: [0.5, 1, 0.8],
+                        rotate: [0, 180 + Math.random() * 180],
+                      }}
+                      transition={{
+                        duration: 1 + Math.random() * 0.5,
+                        delay: i * 0.08,
+                        ease: "easeIn",
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+
               <SeatCard
                 player={p}
                 isCurrentTurn={isCurrentTurn}
                 isMe={isMe}
                 deadline={isCurrentTurn && current_turn?.deadline ? new Date(current_turn.deadline).getTime() : undefined}
               />
-              {/* 底牌（自己 / 摊牌）— 朝屏幕下沿展开,不侵入底池 */}
+              {/* 底牌（自己 / 摊牌）— 从庄家位牌堆飞向座位,落定回弹 */}
               {hole.length > 0 && (
                 <div className="mt-2 flex justify-center gap-1">
-                  {hole.map((c, j) => (
-                    <motion.div
-                      key={`${hand_id}-${c.suit}${c.rank}`}
-                      initial={{ x: -60, y: -80, scale: 0.55, opacity: 0 }}
-                      animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
-                      transition={{ duration: 0.22, delay: j * 0.08, ease: "easeOut" }}
-                    >
-                      <CardSprite card={c} className="scale-75" />
-                    </motion.div>
-                  ))}
+                  {hole.map((c, j) => {
+                    // 计算庄家位置作为牌堆起点
+                    const dealerSeat = seatLayout.find((s) => s.p.seat === button_seat);
+                    const dealerX = dealerSeat ? dealerSeat.x - x : -60;
+                    const dealerY = dealerSeat ? dealerSeat.y - y : -80;
+
+                    return (
+                      <motion.div
+                        key={`${hand_id}-${c.suit}${c.rank}`}
+                        initial={{ x: dealerX, y: dealerY, scale: 0.55, opacity: 0 }}
+                        animate={{ x: 0, y: 0, scale: 1, opacity: 1 }}
+                        transition={{
+                          type: "spring",
+                          stiffness: 180,
+                          damping: 20,
+                          delay: j * 0.08,
+                          duration: 0.22,
+                        }}
+                      >
+                        <CardSprite card={c} className="scale-75" />
+                      </motion.div>
+                    );
+                  })}
                 </div>
               )}
               {/* 庄家按钮 */}
@@ -344,6 +488,37 @@ function DesktopTable({
               <ChipStack amount={c.amount} size={13} />
             </motion.div>
           ))}
+        </AnimatePresence>
+
+        {/* 飘字反馈: 行动时座位上方浮现金色飘字，上浮淡出 */}
+        <AnimatePresence>
+          {floatingTexts.map((ft) => {
+            const seat = seatLayout.find((s) => s.p.sid === ft.sid);
+            if (!seat) return null;
+
+            return (
+              <motion.div
+                key={ft.id}
+                className="pointer-events-none absolute z-30 whitespace-nowrap rounded-full border-2 px-4 py-2 text-base font-bold backdrop-blur-sm"
+                style={{
+                  left: `${seat.x}%`,
+                  top: `${seat.y}%`,
+                  x: "-50%",
+                  y: "-50%",
+                  borderColor: ft.color === "gold" ? "var(--gold)" : "var(--text-lo)",
+                  color: ft.color === "gold" ? "var(--gold)" : "var(--text-lo)",
+                  backgroundColor: ft.color === "gold" ? "rgba(201, 161, 74, 0.15)" : "rgba(179, 169, 142, 0.1)",
+                  boxShadow: ft.color === "gold" ? "0 0 20px rgba(201, 161, 74, 0.4)" : "none",
+                }}
+                initial={{ y: "-50%", opacity: 1, scale: 0.9 }}
+                animate={{ y: "-90px", opacity: 0, scale: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 1.2, ease: "easeOut" }}
+              >
+                {ft.text}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
     </div>
