@@ -94,7 +94,20 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+CREATE TABLE IF NOT EXISTS hand_actions (
+    hand_id INTEGER NOT NULL,
+    seq     INTEGER NOT NULL,
+    sid     TEXT,
+    name    TEXT,
+    action  TEXT NOT NULL,
+    payload TEXT,
+    stage   TEXT,
+    ts      TEXT,
+    PRIMARY KEY (hand_id, seq),
+    FOREIGN KEY (hand_id) REFERENCES hands(id)
+);
 CREATE INDEX IF NOT EXISTS idx_hp_name ON hand_players(name);
+CREATE INDEX IF NOT EXISTS idx_ha_hand ON hand_actions(hand_id);
 """
 
 
@@ -289,12 +302,16 @@ def set_allowed(name: str, allowed: bool, is_admin: bool | None = None) -> dict:
 # ---- 对局 ----
 
 def record_hand(table_id: str, game_type: str, pot: int, board: str,
-                players: list[dict]) -> int:
+                players: list[dict], actions: list[dict] | None = None) -> int:
     """写入一局对局记录，并更新非 bot 玩家的积分/统计。
 
     players: list of dict {name, seat, is_bot, hole, total_bet, net, result}
+    actions: 可选，逐 action 序列 list of dict
+             {seq, sid, name, action, payload(dict|None), stage, ts?}
+             局内动作序列，用于 #013 回放。单事务连同摘要一起写入。
     返回写入的 hand_id。整局用单次事务包裹。
     """
+    import json as _json
     with _write_lock:
         with _txn() as conn:
             cur = conn.execute(
@@ -334,7 +351,105 @@ def record_hand(table_id: str, game_type: str, pot: int, board: str,
                     "hands_won = hands_won + ?, total_net = total_net + ? WHERE name = ?",
                     (net, won, net, p["name"]),
                 )
+
+            # 逐 action 序列（#013 回放）：批量写入，payload 序列化为 JSON 串
+            if actions:
+                for a in actions:
+                    payload = a.get("payload")
+                    payload_str = _json.dumps(payload, ensure_ascii=False) if payload is not None else None
+                    conn.execute(
+                        "INSERT OR REPLACE INTO hand_actions "
+                        "(hand_id, seq, sid, name, action, payload, stage, ts) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            hand_id,
+                            int(a["seq"]),
+                            a.get("sid"),
+                            a.get("name"),
+                            a["action"],
+                            payload_str,
+                            a.get("stage"),
+                            a.get("ts") or _now(),
+                        ),
+                    )
+
             return hand_id
+
+
+def get_replay(hand_id: int) -> dict | None:
+    """返回某局完整回放数据（#013）。对局不存在返回 None。
+
+    结构对齐契约 §1.8 ReplayData：
+      {hand_id, game_type, board, pot, ended_at, players[], actions[]}
+    - players 含起手牌 hole（局已结束，无泄露风险）
+    - actions 按 seq 升序；老局无记录则为空列表（不报错）
+    - payload 反序列化为 dict（或 None）
+    """
+    import json as _json
+    conn = _connect()
+    hand = conn.execute(
+        "SELECT id, game_type, board, pot, ended_at FROM hands WHERE id = ?",
+        (hand_id,),
+    ).fetchone()
+    if not hand:
+        return None
+
+    player_rows = conn.execute(
+        "SELECT name, seat, is_bot, hole FROM hand_players WHERE hand_id = ? ORDER BY seat",
+        (hand_id,),
+    ).fetchall()
+    players = [
+        {
+            "name": r["name"],
+            "seat": r["seat"],
+            "is_bot": bool(r["is_bot"]),
+            "hole": r["hole"] or "",
+        }
+        for r in player_rows
+    ]
+
+    action_rows = conn.execute(
+        "SELECT seq, name, action, payload, stage, ts FROM hand_actions "
+        "WHERE hand_id = ? ORDER BY seq ASC",
+        (hand_id,),
+    ).fetchall()
+    actions = []
+    for r in action_rows:
+        payload = None
+        if r["payload"]:
+            try:
+                payload = _json.loads(r["payload"])
+            except (ValueError, TypeError):
+                payload = None
+        actions.append({
+            "seq": r["seq"],
+            "name": r["name"],
+            "action": r["action"],
+            "payload": payload,
+            "stage": r["stage"],
+            "ts": r["ts"],
+        })
+
+    return {
+        "hand_id": hand["id"],
+        "game_type": hand["game_type"],
+        "board": hand["board"] or "",
+        "pot": hand["pot"] or 0,
+        "ended_at": hand["ended_at"],
+        "players": players,
+        "actions": actions,
+    }
+
+
+def hand_has_player(hand_id: int, name: str) -> bool:
+    """检查某用户是否参与了某局（回放鉴权用）。"""
+    conn = _connect()
+    row = conn.execute(
+        "SELECT 1 FROM hand_players WHERE hand_id = ? AND name = ? LIMIT 1",
+        (hand_id, name),
+    ).fetchone()
+    return row is not None
+
 
 
 def get_stats(name: str) -> dict:
