@@ -77,6 +77,10 @@ export default function TablePage() {
   const mySid =
     sid ?? state.players.find((p) => p.name === name)?.sid ?? "sid-me";
 
+  // 从 state.payload 中提取 community（德州）, 其他玩法传空数组
+  const community =
+    state.game_type === "texas" ? state.payload.community : [];
+
   return (
     <>
       <ReconnectBanner />
@@ -90,6 +94,7 @@ export default function TablePage() {
       gameType={state.game_type}
       stage={state.stage}
       players={state.players}
+        community={community}
     >
       {state.game_type === "texas" && (
         <TexasBoard state={state} privateState={priv} mySid={mySid} />

@@ -7,12 +7,14 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import CardSprite from "./CardSprite";
-import type { HandResult, PublicPlayer, TexasHandResult, BragHandResult } from "../types";
+import { evaluateBestHand } from "../utils/evaluator";
+import type { Card, HandResult, PublicPlayer, TexasHandResult, BragHandResult } from "../types";
 
 interface Props {
   results: HandResult[];
   players: PublicPlayer[];
   nextHandIn: number; // ms，0 = 不自动开下局（单局 / 已打满）
+  community: Card[]; // 公牌（德州需要用于计算最佳5张）
   onClose: () => void;
   onLeave: () => void;
 }
@@ -26,6 +28,7 @@ export default function HandEndModal({
   results,
   players,
   nextHandIn,
+  community,
   onClose,
   onLeave,
 }: Props) {
@@ -77,6 +80,12 @@ export default function HandEndModal({
           <div className="max-h-[50vh] space-y-2 overflow-y-auto p-4">
             {ranked.map((r) => {
               const isWinner = r.amount > 0;
+              // 计算最佳5张（仅德州且有 cards）
+              const evaluation =
+                r.cards && r.cards.length > 0 && community.length > 0
+                  ? evaluateBestHand(r.cards, community)
+                  : null;
+
               return (
                 <div
                   key={r.sid}
@@ -97,17 +106,39 @@ export default function HandEndModal({
                       <span className="text-text-lo">{r.amount}</span>
                     ) : null}
                   </div>
-                  <div className="flex items-center gap-3">
-                    {r.cards && r.cards.length > 0 && (
-                      <div className="flex gap-1">
-                        {r.cards.map((c, i) => (
-                          <CardSprite key={i} card={c} className="h-12 w-9" />
-                        ))}
-                      </div>
-                    )}
-                    {r.hand && (
+                  <div className="flex flex-col gap-2">
+                    {evaluation ? (
+                      <>
+                        {/* 最佳5张 */}
+                        <div className="flex items-center gap-1">
+                          {evaluation.best5.map((c, i) => (
+                            <CardSprite
+                              key={i}
+                              card={c}
+                              className="h-14 w-10"
+                            />
+                          ))}
+                        </div>
+                        {/* 牌型名 */}
+                        <span className="text-sm font-medium text-gold">
+                          {evaluation.handRank}
+                        </span>
+                      </>
+                    ) : r.cards && r.cards.length > 0 ? (
+                      <>
+                        {/* 炸金花等其他玩法:仍显示原始手牌 */}
+                        <div className="flex gap-1">
+                          {r.cards.map((c, i) => (
+                            <CardSprite key={i} card={c} className="h-12 w-9" />
+                          ))}
+                        </div>
+                        {r.hand && (
+                          <span className="text-sm text-text-lo">{r.hand}</span>
+                        )}
+                      </>
+                    ) : r.hand ? (
                       <span className="text-sm text-text-lo">{r.hand}</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               );

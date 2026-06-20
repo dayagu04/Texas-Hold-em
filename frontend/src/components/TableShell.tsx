@@ -13,7 +13,7 @@ import { soundManager } from "../utils/sound";
 import { useTableState } from "../hooks/useTableState";
 import Countdown from "./Countdown";
 import HandEndModal from "./HandEndModal";
-import type { ActionLog, CurrentTurn, GameType, LegalAction, PrivateState, PublicPlayer } from "../types";
+import type { ActionLog, Card, CurrentTurn, GameType, LegalAction, PrivateState, PublicPlayer } from "../types";
 
 /* 各玩法最小开局人数（对齐后端 min_players 校验）。 */
 const MIN_PLAYERS: Record<GameType, number> = {
@@ -42,6 +42,7 @@ interface Props {
   gameType: GameType;
   stage: string; // 牌局阶段；"waiting" = 未开局
   players: PublicPlayer[];
+  community: Card[]; // 公牌（德州摊牌时用于计算最佳5张）
   children: ReactNode; // board 区域
 }
 
@@ -55,6 +56,7 @@ export default function TableShell({
   gameType,
   stage,
   players,
+  community,
   children,
 }: Props) {
   const navigate = useNavigate();
@@ -262,7 +264,7 @@ export default function TableShell({
 
       <div className="flex flex-1">
         {/* 中央 board 区（占满全宽,聊天改为右下浮窗不再挤占横向空间） */}
-        <main className="relative flex-1 p-3">
+        <main className="relative z-30 flex-1 p-3">
           {/* 开始游戏入口（仅未开局时） */}
           {notStarted && (
             <div className="mb-4 flex items-center justify-center">
@@ -329,7 +331,7 @@ export default function TableShell({
 
           {/* 实时牌型预览框（仅自己可见，数据来自 private_state.hand_rank；掼蛋为 null 不显示） */}
           {privateState?.hand_rank?.name && (
-            <div className="absolute bottom-4 right-4 rounded-panel border border-gold/40 bg-base/80 px-4 py-2 backdrop-blur-sm">
+            <div className="absolute bottom-4 right-4 z-30 rounded-panel border border-gold/40 bg-base/80 px-4 py-2 backdrop-blur-sm">
               <span className="text-xs text-text-lo">
                 {zhCN.table.currentHand}
               </span>
@@ -341,71 +343,137 @@ export default function TableShell({
         </main>
       </div>
 
-      {/* 右下浮动聊天窗（收起=圆形按钮 + 未读红点;展开=半透明小窗） */}
-      <div className="fixed bottom-16 right-2 z-40 flex flex-col items-end md:bottom-28 md:right-4">
+      {/* 右下浮动聊天窗（收起=圆形按钮 + 未读红点;展开=半透明小窗，移动端改为底部抽屉） */}
+      <div className="fixed bottom-16 right-2 z-10 flex flex-col items-end md:bottom-28 md:right-4">
         {chatOpen && (
-          <div className="mb-2 w-72 rounded-panel border border-gold/30 bg-base/85 p-3 shadow-elev backdrop-blur-md md:w-80">
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-text-hi">
-                {zhCN.table.chat}
-              </h3>
-              <button
-                onClick={() => setChatOpen(false)}
-                className="text-text-lo transition hover:text-text-hi"
-                aria-label="收起聊天"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="mb-3 h-48 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs md:h-56">
-              {chatMessages.length === 0 ? (
-                <p className="text-text-lo/50">暂无消息</p>
-              ) : (
-                chatMessages.map((m, i) => (
-                  <div key={i} className="mb-2">
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-medium text-gold">{m.name}</span>
-                      {m.ts && (
-                        <span className="text-[10px] text-text-lo/70">
-                          {formatChatTime(m.ts)}
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-text-hi">{m.text}</div>
-                  </div>
-                ))
-              )}
-              <div ref={chatEndRef} />
-            </div>
-            {/* 快捷消息按钮 */}
-            <div className="mb-2 flex flex-wrap gap-1">
-              {zhCN.table.quickMessages.map((msg) => (
+          <>
+            {/* 桌面端：浮层覆盖右侧空白，不遮牌桌中心 */}
+            <div className="mb-2 hidden w-80 rounded-panel border border-gold/30 bg-base/90 p-3 shadow-elev backdrop-blur-md md:block">
+              <div className="mb-2 flex items-center justify-between">
+                <h3 className="text-sm font-medium text-text-hi">
+                  {zhCN.table.chat}
+                </h3>
                 <button
-                  key={msg}
-                  onClick={() => handleQuickMessage(msg)}
-                  className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi active:bg-gold/10"
+                  onClick={() => setChatOpen(false)}
+                  className="text-text-lo transition hover:text-text-hi"
+                  aria-label="收起聊天"
                 >
-                  {msg}
+                  ✕
                 </button>
-              ))}
+              </div>
+              <div className="mb-3 h-56 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs">
+                {chatMessages.length === 0 ? (
+                  <p className="text-text-lo/50">暂无消息</p>
+                ) : (
+                  chatMessages.map((m, i) => (
+                    <div key={i} className="mb-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-medium text-gold">{m.name}</span>
+                        {m.ts && (
+                          <span className="text-[10px] text-text-lo/70">
+                            {formatChatTime(m.ts)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-text-hi">{m.text}</div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+              {/* 快捷消息按钮 */}
+              <div className="mb-2 flex flex-wrap gap-1">
+                {zhCN.table.quickMessages.map((msg) => (
+                  <button
+                    key={msg}
+                    onClick={() => handleQuickMessage(msg)}
+                    className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi active:bg-gold/10"
+                  >
+                    {msg}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatText}
+                  onChange={(e) => setChatText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleChat()}
+                  placeholder={zhCN.table.chatPlaceholder}
+                  className="flex-1 rounded-card border border-rim bg-base px-2 py-1 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none"
+                />
+                <button
+                  onClick={handleChat}
+                  className="rounded-card bg-gold px-3 py-1 text-sm font-bold text-base transition hover:bg-gold-soft active:bg-gold-soft"
+                >
+                  ↑
+                </button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={chatText}
-                onChange={(e) => setChatText(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleChat()}
-                placeholder={zhCN.table.chatPlaceholder}
-                className="flex-1 rounded-card border border-rim bg-base px-2 py-1.5 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none md:py-1"
-              />
-              <button
-                onClick={handleChat}
-                className="rounded-card bg-gold px-3 py-1.5 text-sm font-bold text-base transition hover:bg-gold-soft active:bg-gold-soft md:py-1"
-              >
-                ↑
-              </button>
+
+            {/* 移动端：底部抽屉，上滑展开 */}
+            <div className="fixed inset-x-0 bottom-0 z-40 block rounded-t-2xl border-t border-gold/30 bg-base/95 p-4 shadow-elev backdrop-blur-md md:hidden">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="text-base font-medium text-text-hi">
+                  {zhCN.table.chat}
+                </h3>
+                <button
+                  onClick={() => setChatOpen(false)}
+                  className="text-lg text-text-lo transition hover:text-text-hi"
+                  aria-label="收起聊天"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="mb-3 h-48 overflow-y-auto rounded-card border border-rim bg-base/40 p-2 text-xs">
+                {chatMessages.length === 0 ? (
+                  <p className="text-text-lo/50">暂无消息</p>
+                ) : (
+                  chatMessages.map((m, i) => (
+                    <div key={i} className="mb-2">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-medium text-gold">{m.name}</span>
+                        {m.ts && (
+                          <span className="text-[10px] text-text-lo/70">
+                            {formatChatTime(m.ts)}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-text-hi">{m.text}</div>
+                    </div>
+                  ))
+                )}
+                <div ref={chatEndRef} />
+              </div>
+              <div className="mb-2 flex flex-wrap gap-1">
+                {zhCN.table.quickMessages.map((msg) => (
+                  <button
+                    key={msg}
+                    onClick={() => handleQuickMessage(msg)}
+                    className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:bg-gold/5 hover:text-text-hi active:bg-gold/10"
+                  >
+                    {msg}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatText}
+                  onChange={(e) => setChatText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleChat()}
+                  placeholder={zhCN.table.chatPlaceholder}
+                  className="flex-1 rounded-card border border-rim bg-base px-3 py-2 text-sm text-text-hi placeholder:text-text-lo focus:border-gold-soft focus:outline-none"
+                />
+                <button
+                  onClick={handleChat}
+                  className="rounded-card bg-gold px-4 py-2 text-sm font-bold text-base transition hover:bg-gold-soft active:bg-gold-soft"
+                >
+                  ↑
+                </button>
+              </div>
             </div>
-          </div>
+          </>
         )}
         <button
           onClick={() => {
@@ -427,7 +495,7 @@ export default function TableShell({
 
       {/* 底部行动条（常驻，非我回合时透明隐藏） */}
       <footer
-        className={`h-24 border-t border-rim/30 bg-base/90 px-6 py-4 backdrop-blur-sm transition-opacity duration-300 ${
+        className={`z-20 h-24 border-t border-rim/30 bg-base/90 px-6 py-4 backdrop-blur-sm transition-opacity duration-300 ${
           isMyTurn && currentTurn ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
@@ -460,6 +528,7 @@ export default function TableShell({
           results={handEndData.results}
           players={players}
           nextHandIn={handEndData.next_hand_in}
+          community={community}
           onClose={() => setShowHandEnd(false)}
           onLeave={() => {
             emit("lobby:leave_table", { table_id: tableId });
