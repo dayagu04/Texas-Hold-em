@@ -222,40 +222,40 @@ export default function TableShell({
   return (
     <div className="flex min-h-screen flex-col bg-felt">
       {/* 顶部栏 */}
-      <header className="flex items-center justify-between border-b border-rim/30 bg-base/80 px-6 py-3 backdrop-blur-sm">
+      <header className="flex items-center justify-between border-b border-rim/30 bg-base/80 px-3 py-2 backdrop-blur-sm md:px-6 md:py-3">
         <button
           onClick={() => navigate("/lobby")}
-          className="rounded-card border border-rim px-3 py-1.5 text-sm text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+          className="rounded-card border border-rim px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi md:px-3 md:py-1.5 md:text-sm"
         >
           ← {zhCN.table.leave}
         </button>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-text-lo">
+        <div className="flex items-center gap-1 md:gap-3">
+          <span className="text-xs text-text-lo md:text-sm">
             {zhCN.table.roomNumber(tableId)}
           </span>
           <button
             onClick={handleCopyRoomNumber}
-            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            className="rounded border border-rim/50 px-1.5 py-0.5 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi md:px-2 md:py-1"
             title={zhCN.table.copyRoomNumber}
           >
             📋
           </button>
           <button
             onClick={handleCopyInviteLink}
-            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            className="hidden rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi md:inline-block"
             title={zhCN.table.copyInviteLink}
           >
             🔗
           </button>
           <button
             onClick={toggleSound}
-            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            className="rounded border border-rim/50 px-1.5 py-0.5 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi md:px-2 md:py-1"
             title={soundMuted ? "开启音效" : "关闭音效"}
           >
             {soundMuted ? "🔇" : "🔊"}
           </button>
         </div>
-        <span className="text-sm text-text-lo">
+        <span className="text-xs text-text-lo md:text-sm">
           {zhCN.table.handNo(handId)}
         </span>
       </header>
