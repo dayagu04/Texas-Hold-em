@@ -284,6 +284,28 @@ async def lobby_create_table(sid, data):
     await _broadcast_lobby_update()
 
 
+@sio.on('lobby:quick_match')
+async def lobby_quick_match(sid, data):
+    """快速匹配：自动选一个等待中未满的指定玩法房间并入座最小空位。"""
+    sess = sessions.get(sid)
+    if not sess:
+        return
+
+    game_type = data.get("game_type")
+    if not game_type:
+        return
+
+    # 选房
+    table_id = lobby.quick_match(game_type)
+    if not table_id:
+        # 无可加入房间，回 no_match
+        await sio.emit("lobby:no_match", {"game_type": game_type}, room=sid)
+        return
+
+    # 命中 → 复用 join_table 逻辑（自动选最小空位）
+    await lobby_join_table(sid, {"table_id": table_id, "seat": None, "spectate": False})
+
+
 @sio.on('lobby:join_table')
 async def lobby_join_table(sid, data):
     """加入已有房间。"""

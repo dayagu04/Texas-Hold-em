@@ -114,6 +114,31 @@ class Lobby:
             })
         return result
 
+    def quick_match(self, game_type: str) -> str | None:
+        """快速匹配：选一个等待中未满的指定玩法房间，返回 table_id 或 None。
+
+        优先选 seats_taken 最多的未满房间（更快凑齐开局）。
+        """
+        candidates = []
+        for tid, engine in self.tables.items():
+            if engine.game_type != game_type:
+                continue
+            state = engine.public_state()
+            players = state.get("players", [])
+            seats_taken = len(players)
+            status = "waiting" if state.get("stage") == "waiting" else "playing"
+
+            # 筛选: waiting 且未满
+            if status == "waiting" and seats_taken < engine.max_players:
+                candidates.append((tid, seats_taken))
+
+        if not candidates:
+            return None
+
+        # 选 seats_taken 最多的(更快凑齐)
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[0][0]
+
 
 # 全局单例
 lobby = Lobby()
