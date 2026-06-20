@@ -4,7 +4,19 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 
+APP_ENV = os.getenv("APP_ENV", "development")
 SECRET = os.getenv("APP_SECRET", "dev-secret-change-in-production")
+
+# 生产模式强制 APP_SECRET，开发模式警告
+if APP_ENV == "production":
+    if SECRET == "dev-secret-change-in-production":
+        raise RuntimeError(
+            "生产模式下必须设置 APP_SECRET 环境变量。"
+            "请生成一个强随机密钥(≥32字节)并通过 APP_SECRET 环境变量提供。"
+        )
+elif SECRET == "dev-secret-change-in-production":
+    print("⚠️  警告: 正在使用默认 JWT secret。生产部署前请设置 APP_SECRET 环境变量。")
+
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 8
 

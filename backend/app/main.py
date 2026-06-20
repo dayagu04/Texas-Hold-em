@@ -237,22 +237,12 @@ def leaderboard(metric: str = "points", limit: int = 10, username: str = Depends
 
 
 @app.post("/api/lobby/cleanup")
-async def cleanup_lobby(authorization: str = Header(None)):
-    """清理无真人在座的房间（死局回收）。需要 token 鉴权。
+async def cleanup_lobby(username: str = Depends(get_current_admin)):
+    """清理无真人在座的房间（死局回收）。需要管理员权限。
 
     安全红线：只删 players 里没有任何活跃真人（非 bot 且 sid 在 sessions 中）
     的房间，正在玩的真人局绝不误删。清理后广播 lobby:update 刷新前端。
     """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail={
-            "error": {"code": "AUTH_REQUIRED", "message": "缺少 token"}
-        })
-    token = authorization[7:]
-    if not verify_token(token):
-        raise HTTPException(status_code=401, detail={
-            "error": {"code": "INVALID_TOKEN", "message": "token 无效或已过期"}
-        })
-
     active_sids = set(sessions.keys())
     removed = lobby.cleanup_empty(active_sids)
 
@@ -263,14 +253,16 @@ async def cleanup_lobby(authorization: str = Header(None)):
     return {"removed_count": len(removed), "removed": removed}
 
 
-class FrontendLog(BaseModel):
-    message: str
+# ---- Debug 接口(仅非生产环境) ----
 
+if os.getenv("APP_ENV") != "production":
+    class FrontendLog(BaseModel):
+        message: str
 
-@app.post("/api/debug/log")
-async def collect_frontend_log(data: FrontendLog):
-    log(f"[FRONTEND] {data.message}")
-    return {"status": "ok"}
+    @app.post("/api/debug/log")
+    async def collect_frontend_log(data: FrontendLog):
+        log(f"[FRONTEND] {data.message}")
+        return {"status": "ok"}
 
 
 # ---- 前端静态资源挂载 ----
@@ -296,7 +288,13 @@ if FRONTEND_DIST.exists():
             raise HTTPException(status_code=404, detail="Not found")
 
         # 静态文件（favicon.svg, icons.svg 等）
-        file_path = FRONTEND_DIST / full_path
+        file_path = (FRONTEND_DIST / full_path).resolve()
+        # 防止目录穿越: 确保解析后的路径在 FRONTEND_DIST 内
+        try:
+            file_path.relative_to(FRONTEND_DIST.resolve())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid path")
+
         if file_path.is_file():
             return FileResponse(file_path)
 

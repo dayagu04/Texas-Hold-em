@@ -2,6 +2,7 @@
 
 按 API-CONTRACT.md 实现所有事件。
 """
+import os
 import socketio
 import asyncio
 import random
@@ -11,7 +12,14 @@ from .lobby import lobby
 from .logger import log
 from . import db
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+# CORS 配置：生产从 ALLOWED_ORIGINS 读，开发默认 localhost
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:5166,http://127.0.0.1:5166"
+)
+cors_origins = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+
+sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins=cors_origins)
 
 # sid -> {name, table_id | None}
 sessions: dict[str, dict] = {}
