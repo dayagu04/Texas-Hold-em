@@ -30,12 +30,22 @@
 
   --shadow-card:    0 2px 6px rgba(0,0,0,.6), 0 0 0 1px rgba(201,161,74,.15) inset;
   --shadow-elev:    0 12px 40px rgba(0,0,0,.55);
+  --shadow-float:   多层柔影（牌面浮起感，见 tokens.css 完整定义）
+  --shadow-chip:    筹码接触投影（贴桌柔影，见 tokens.css）
+  --shadow-seat:    座位卡悬浮投影（更深更柔和，见 tokens.css）
   --radius-card:    8px;
   --radius-panel:   16px;
 
   --t-fast:  120ms;
   --t-base:  220ms;
   --t-slow:  420ms;
+
+  /* #015-A 新增材质令牌 */
+  --table-edge-inner/mid/highlight/outer:  立体桌沿多层描边色
+  --card-gloss:     牌面左上光泽叠层（立体卡片光感）
+  --card-back-bg:   牌背暗金花纹网格
+  --seat-card-bg:   座位卡微妙渐变底（毛玻璃效果）
+  --dealer-bg:      庄家按钮金色径向渐变
 }
 ```
 
@@ -136,15 +146,17 @@
 - 倒计时进度条嵌在行动条左侧，颜色 5 秒内变红。
 
 ### 7.1 共用组件
-- `<SeatCard>`：玩家头像（首字母圆形）、昵称、筹码、当前下注 chip 数、状态徽标（folded / all-in / 🤖level）。
-- `<CardSprite>`：单张牌组件，支持 `face` `back` `dim`（暗淡，不在最优组合中）。
-- `<ChipStack>`：筹码堆叠，按数量分层渲染（5/25/100/500 不同颜色），动画用 `transform: translate` + opacity。
-- `<DealerButton>`：金色 `D` 圆形，挂在庄家位旁。
+- `<SeatCard>`：玩家头像（首字母圆形）、昵称、筹码、当前下注 chip 数、状态徽标（folded / all-in / 🤖level）。**#015-A**：金属质感描边、渐变底板、当前行动者金色呼吸光环（2s 脉冲循环）。
+- `<CardSprite>`：单张牌组件，支持 `face` `back` `dim`（暗淡，不在最优组合中）。**#015-A**：增强厚度感（底部深色边 2-3px + 增强圆角 + 多层阴影）、牌背统一暗金花纹双层菱形、dim 态半透明+下沉（opacity-50 scale-97 translate-y-1）。
+- `<ChipStack>`：筹码堆叠，按数量分层渲染（5白/25红/100绿/500黑/2000紫，真实赌场惯例），动画用 `transform: translate` + opacity。**#015-A**：立体筹码（径向高光 + 多层叠影 + 同心圆 inlay + 顶部椭圆高光）。
+- `<DealerButton>`：金色 `D` 圆形，挂在庄家位旁。**已有**：金色径向渐变 + 外光晕 + 筹码式同心内圈 + 顶部椭圆高光（金属/陶瓷质感）。
 
 ### 7.2 三种 Board 差异
 
 #### TexasBoard
 - 中央椭圆桌，5 张公共牌位居中；`pot` 数字正下方。
+- **#015-A**：桌面多层材质叠加（felt 基底渐变 + 纤维纹理 + 受光层）+ 立体桌沿（内阴影 6px + 金色高光描边 + 外投影多层）+ 中心聚光层（增强亮度突出焦点）+ 四周暗角（增强纵深感）。
+- **#015-A**：底池显示增强质感（双层金色边框 + 多层光晕 + 立体内外投影 + 渐变底）。
 - 摊牌：胜者底牌高亮 + 金色光晕，非最优 3 张 dim。
 
 #### GuandanBoard

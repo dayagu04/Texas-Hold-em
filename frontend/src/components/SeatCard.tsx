@@ -49,10 +49,20 @@ export default function SeatCard({
         isMe
           ? "border-2 border-gold bg-seat-card shadow-seat"
           : isCurrentTurn
-            ? "animate-[activePulse_2s_ease-in-out_infinite] border-2 border-gold-soft bg-seat-card"
+            ? "border-2 border-gold-soft bg-seat-card shadow-seat animate-[activePulse_2s_ease-in-out_infinite]"
             : "border border-rim/80 bg-seat-card shadow-seat"
       } p-3.5 transition-all duration-base ${isWinner ? "animate-[winnerGlow_1200ms_ease-in-out]" : ""} ${className}`}
     >
+      {/* 呼吸光环效果：当前行动者专属，金色外发光脉冲 */}
+      {isCurrentTurn && (
+        <div
+          className="pointer-events-none absolute inset-0 rounded-xl"
+          style={{
+            animation: "activePulse 2s ease-in-out infinite",
+            zIndex: -1,
+          }}
+        />
+      )}
       {/* 头像（首字母圆形 / 真实头像） */}
       <div className="mb-2.5 flex items-center gap-2.5">
         <div className="relative">

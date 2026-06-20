@@ -151,32 +151,49 @@ export default function CardSprite({ card, dim, animate, className = "" }: Props
 
   // 容器查询：牌内字号以 cqmin 为基准，随牌尺寸等比缩放。
   // overflow-visible 给角标留足空间，缩放时不裁切。
+  // dim 态：半透明+下沉，表示非最优组合牌
   const baseShell =
     `relative overflow-visible rounded-card shadow-float [container-type:size] ` +
-    `${sizeClass} ${dim ? "opacity-40" : ""} ${animClass} ${className}`;
+    `${sizeClass} ${dim ? "opacity-50 scale-[0.97] translate-y-1" : ""} ${animClass} ${className}`;
 
   if (!card) {
-    // 背面：金色菱形暗纹网格 + 金边 + 中央双层菱形徽记。
+    // 背面：统一暗金花纹 + 立体厚度感（底部深色边+金边描边）
     return (
-      <div className={`${baseShell} bg-card-back border border-gold/40`}>
-        {/* 内描边边框 */}
-        <div className="absolute inset-[7%] rounded-[5px] border border-gold/25" />
+      <div className={`${baseShell} bg-card-back border-2 border-gold/50`}>
+        {/* 内描边边框（双层金色细边，增强精致感） */}
+        <div className="absolute inset-[7%] rounded-[5px] border border-gold/30" />
+        <div className="absolute inset-[10%] rounded-[4px] border border-gold/15" />
         <div className="absolute inset-0 flex items-center justify-center">
-          {/* 外菱形 */}
+          {/* 外菱形（金色立体框架） */}
           <span
-            className="absolute rotate-45 border-2 border-gold/45 bg-gold/10"
-            style={{ width: "30cqmin", height: "30cqmin" }}
+            className="absolute rotate-45 border-2 border-gold/55 bg-gold/12"
+            style={{
+              width: "30cqmin",
+              height: "30cqmin",
+              boxShadow: "inset 0 1px 2px rgba(201,161,74,0.3), 0 2px 4px rgba(0,0,0,0.4)"
+            }}
           />
           {/* 内菱形 */}
           <span
-            className="absolute rotate-45 border border-gold/35"
+            className="absolute rotate-45 border border-gold/40 bg-gold/5"
             style={{ width: "18cqmin", height: "18cqmin" }}
           />
-          {/* 中心徽记 */}
-          <span className="absolute text-gold/70" style={{ fontSize: "16cqmin" }}>
+          {/* 中心徽记（增强金色光晕） */}
+          <span
+            className="absolute text-gold drop-shadow-[0_0_4px_rgba(201,161,74,0.6)]"
+            style={{ fontSize: "16cqmin", fontFamily: SUIT_FONT_STACK }}
+          >
             ♦
           </span>
         </div>
+        {/* 底部厚度边（模拟卡片厚度的暗边） */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] rounded-b-card"
+          style={{
+            background: "linear-gradient(to bottom, transparent, rgba(0,0,0,0.5))",
+            transform: "translateY(1px)"
+          }}
+        />
       </div>
     );
   }
@@ -316,7 +333,7 @@ export default function CardSprite({ card, dim, animate, className = "" }: Props
 }
 
 /*
- * 正面牌壳：暖白渐变底 + 细牌缘描边 + 左上光泽叠层（立体卡片观感）。
+ * 正面牌壳：暖白渐变底 + 细牌缘描边 + 左上光泽叠层（立体卡片观感）+ 底部厚度边。
  * children 为牌面内容（pip / 角标 / 人头 / joker）。
  */
 function CardFaceShell({
@@ -329,13 +346,21 @@ function CardFaceShell({
   return (
     <div
       className={`${baseShell} bg-card-front`}
-      style={{ border: "1px solid var(--color-card-edge)" }}
+      style={{ border: "1.5px solid var(--color-card-edge)" }}
     >
       {children}
       {/* 光泽叠层：左上柔和高光，不挡交互 */}
       <div className="pointer-events-none absolute inset-0 rounded-card bg-card-gloss" />
       {/* 内缘高光细线：模拟卡片切边受光 */}
       <div className="pointer-events-none absolute inset-0 rounded-card shadow-[inset_0_1px_1px_rgba(255,255,255,0.7),inset_0_-1px_2px_rgba(0,0,0,0.08)]" />
+      {/* 底部厚度边：暗色边缘模拟卡片物理厚度 */}
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] rounded-b-card"
+        style={{
+          background: "linear-gradient(to bottom, transparent, rgba(0,0,0,0.45))",
+          transform: "translateY(0.5px)"
+        }}
+      />
     </div>
   );
 }

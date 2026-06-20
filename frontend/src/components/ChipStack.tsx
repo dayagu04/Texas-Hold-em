@@ -25,8 +25,10 @@ interface ChipTier {
 }
 
 // 金额 → 档位（颜色 + 堆高）。阈值参考真实筹码面额梯度。
+// 5白 / 25红 / 100绿 / 500黑 / 2000紫
 function tierFor(amount: number): ChipTier {
-  if (amount < 25) return { color: "--color-chip-white", count: amount < 10 ? 1 : 2 };
+  if (amount < 5) return { color: "--color-chip-white", count: 1 };
+  if (amount < 25) return { color: "--color-chip-white", count: 2 };
   if (amount < 100) return { color: "--color-chip-red", count: 3 };
   if (amount < 500) return { color: "--color-chip-green", count: 3 };
   if (amount < 2000) return { color: "--color-chip-black", count: 4 };

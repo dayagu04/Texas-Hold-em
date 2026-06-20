@@ -159,38 +159,41 @@ function DesktopTable({
 }) {
   return (
     <div className="relative h-full">
-      {/* 椭圆桌面：多层材质叠加 + 立体桌沿。inset 收窄让桌面占满主区。 */}
+      {/* 椭圆桌面：多层材质叠加 + 立体桌沿 + 绒布质感。inset 收窄让桌面占满主区。 */}
       <div
         className="absolute inset-x-4 inset-y-3 rounded-[50%] bg-felt"
         style={{
           boxShadow: `
             inset 0 0 0 1px var(--table-edge-inner),
-            inset 0 0 0 5px var(--table-edge-mid),
-            inset 0 1px 2px 5px var(--table-edge-highlight),
-            inset 0 0 0 8px var(--table-edge-outer),
-            inset 0 0 120px rgba(0, 0, 0, 0.7),
-            0 25px 60px rgba(0, 0, 0, 0.6)
+            inset 0 0 0 6px var(--table-edge-mid),
+            inset 0 2px 3px 6px var(--table-edge-highlight),
+            inset 0 0 0 9px var(--table-edge-outer),
+            inset 0 0 140px rgba(0, 0, 0, 0.75),
+            0 28px 70px rgba(0, 0, 0, 0.65),
+            0 12px 30px rgba(0, 0, 0, 0.5)
           `,
         }}
       >
-        {/* 桌面中心聚光层 */}
-        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-table-spotlight" />
-        {/* 桌面暗角层（四周压暗） */}
-        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-[radial-gradient(ellipse_at_center,transparent_48%,rgba(0,0,0,0.45)_100%)]" />
+        {/* 桌面中心聚光层（增强亮度，突出焦点区） */}
+        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-table-spotlight opacity-90" />
+        {/* 桌面暗角层（四周压暗，增强纵深感） */}
+        <div className="pointer-events-none absolute inset-0 rounded-[50%] bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.5)_100%)]" />
         {/* 中央区：公共牌 + pot */}
         <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center gap-4">
-          {/* pot - 精致金色光晕 + 立体描边 + 微妙渐变底 */}
+          {/* pot - 精致金色光晕 + 立体描边 + 微妙渐变底 + 增强质感 */}
           <div
-            className="rounded-panel border border-gold/60 bg-base/85 px-6 py-3 text-center backdrop-blur-sm"
+            className="rounded-panel border-2 border-gold/70 bg-base/90 px-6 py-3 text-center backdrop-blur-md"
             style={{
               boxShadow: `
-                0 0 24px rgba(201, 161, 74, 0.35),
-                inset 0 1px 1px rgba(201, 161, 74, 0.25),
-                0 12px 40px rgba(0, 0, 0, 0.55)
+                0 0 28px rgba(201, 161, 74, 0.4),
+                0 0 16px rgba(231, 200, 122, 0.3),
+                inset 0 1px 2px rgba(201, 161, 74, 0.3),
+                inset 0 -1px 1px rgba(0, 0, 0, 0.2),
+                0 15px 45px rgba(0, 0, 0, 0.6)
               `,
               background: `
-                radial-gradient(ellipse at 50% 30%, rgba(201, 161, 74, 0.08) 0%, transparent 60%),
-                rgba(13, 15, 14, 0.85)
+                radial-gradient(ellipse at 50% 25%, rgba(231, 200, 122, 0.12) 0%, transparent 65%),
+                linear-gradient(155deg, rgba(22, 26, 24, 0.92) 0%, rgba(13, 15, 14, 0.95) 100%)
               `,
             }}
           >
@@ -230,13 +233,15 @@ function DesktopTable({
             </div>
           )}
 
-          {/* 阶段标签 - 精致金色徽章 */}
+          {/* 阶段标签 - 精致金色徽章（增强立体感） */}
           <div
-            className="rounded-full border border-gold/70 bg-base/70 px-5 py-1.5 text-sm font-semibold text-gold backdrop-blur-sm"
+            className="rounded-full border-2 border-gold/80 bg-base/75 px-5 py-1.5 text-sm font-semibold text-gold backdrop-blur-md"
             style={{
               boxShadow: `
-                0 0 12px rgba(201, 161, 74, 0.25),
-                inset 0 1px 0 rgba(201, 161, 74, 0.2)
+                0 0 16px rgba(201, 161, 74, 0.35),
+                0 0 8px rgba(231, 200, 122, 0.25),
+                inset 0 1px 1px rgba(201, 161, 74, 0.25),
+                inset 0 -1px 0 rgba(0, 0, 0, 0.15)
               `,
             }}
           >
