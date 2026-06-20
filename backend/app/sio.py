@@ -519,6 +519,7 @@ async def table_remove_bot(sid, data):
 @sio.on('table:chat')
 async def table_chat(sid, data):
     """聊天。"""
+    import time
     sess = sessions.get(sid)
     if not sess:
         return
@@ -533,7 +534,7 @@ async def table_chat(sid, data):
         "sid": sid,
         "name": sess["name"],
         "text": text,
-        "ts": "",  # TODO: 添加时间戳
+        "ts": int(time.time() * 1000),
     }, room=table_id)
 
 

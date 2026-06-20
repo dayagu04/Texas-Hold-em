@@ -474,18 +474,50 @@ class TexasEngine:
         return pots
 
     def _record_winners(self, payouts: dict[str, int], scores: dict[str, tuple]):
+        """记录本局结果。payouts 是赢家分成,scores 是所有摊牌玩家评分。
+
+        输出顺序:赢家在前(按 payout 降序),输家在后(按 seat 升序)。
+        所有摊牌玩家(scores 内)都填 cards + hand,弃牌者不在 scores 里。
+        """
         self.winners_info = []
+
+        # 先收集赢家(payout > 0)
+        winners = []
         for sid, amt in payouts.items():
-            if amt <= 0:
-                continue
-            player = self.players[sid]
-            player.chips += amt
-            cat, *vals = scores[sid]
-            hand_name = CATEGORY_NAMES.get(cat, "未知牌型")
-            self.winners_info.append({
-                "sid": sid,
-                "name": player.name,
-                "amount": amt,
-                "hand": hand_name,
-                "cards": [c.to_dict() for c in player.hole],
-            })
+            if amt > 0:
+                player = self.players[sid]
+                cat, *vals = scores[sid]
+                hand_name = CATEGORY_NAMES.get(cat, "未知牌型")
+                winners.append({
+                    "sid": sid,
+                    "name": player.name,
+                    "amount": amt,
+                    "hand": hand_name,
+                    "cards": [c.to_dict() for c in player.hole],
+                })
+        # 按赢得金额降序(多赢的在前)
+        winners.sort(key=lambda w: w["amount"], reverse=True)
+        self.winners_info.extend(winners)
+
+        # 再收集输家(在 scores 里但 payout == 0)
+        losers = []
+        for sid, score in scores.items():
+            if payouts.get(sid, 0) == 0:
+                player = self.players[sid]
+                cat, *vals = score
+                hand_name = CATEGORY_NAMES.get(cat, "未知牌型")
+                losers.append({
+                    "sid": sid,
+                    "name": player.name,
+                    "amount": 0,
+                    "hand": hand_name,
+                    "cards": [c.to_dict() for c in player.hole],
+                })
+        # 输家按 seat 升序
+        losers.sort(key=lambda l: self.players[l["sid"]].seat)
+        self.winners_info.extend(losers)
+
+        # 给赢家加筹码(输家不用减,已在下注时扣)
+        for sid, amt in payouts.items():
+            if amt > 0:
+                self.players[sid].chips += amt
