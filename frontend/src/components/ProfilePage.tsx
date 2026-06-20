@@ -5,6 +5,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { useMe } from "../hooks/useMe";
 import * as api from "../api";
 import { zhCN } from "../i18n/zh-CN";
 import Avatar from "./Avatar";
@@ -52,6 +53,7 @@ function formatTime(iso: string): string {
 export default function ProfilePage() {
   const { name } = useAuth();
   const navigate = useNavigate();
+  const { data: meData, refresh: refreshMe } = useMe();
   const [avatar, setAvatar] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -61,20 +63,18 @@ export default function ProfilePage() {
   const [stats, setStats] = useState<ProfileStats | null>(null);
   const [history, setHistory] = useState<HandHistory[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [isAdmin, setIsAdmin] = useState(false);
   const [myRank, setMyRank] = useState<number | null>(null);
 
+  // 从 useMe 同步数据
   useEffect(() => {
-    // 头像 + 积分（me 也带 points，但 stats 更全）
-    api
-      .me()
-      .then((res) => {
-        setAvatar(res.avatar ?? null);
-        setIsAdmin(res.is_admin ?? false);
-      })
-      .catch(() => setAvatar(null));
+    if (meData) {
+      setAvatar(meData.avatar ?? null);
+    }
+  }, [meData]);
 
-    api
+  const isAdmin = meData?.is_admin ?? false;
+
+  useEffect(() => {
       .getStats()
       .then(setStats)
       .catch(() => setStats(null));
@@ -126,6 +126,7 @@ export default function ProfilePage() {
       setAvatar(res.avatar);
       setPreviewUrl(null);
       setSelectedFile(null);
+      await refreshMe(); // 刷新 useMe 缓存
     } catch (err) {
       setError(err instanceof Error ? err.message : "上传失败");
     } finally {

@@ -130,6 +130,53 @@ LeaderboardEntry = {
 ```
 - 排序键：`points` → points DESC；`net` → total_net DESC；`winrate` → winrate DESC。
 
+### 1.8 牌局回放（#013）
+
+> 配合 #013。需后端新增 `hand_actions` 表持久化逐 action 序列（建表与埋点见 `docs/features/013-hand-replay.md`）。本接口在该表就绪后提供。
+
+```
+GET /api/hand/{hand_id}/replay   Authorization: Bearer <token>
+200 → ReplayData
+403 → { "error": { "code": "FORBIDDEN", "message": "无权查看该局回放" } }
+404 → { "error": { "code": "HAND_NOT_FOUND", "message": "对局不存在" } }
+```
+
+- **权限**：仅该局参与者可看——查 `hand_players` 是否含当前用户，否则 403。
+- 起手牌（`players[].hole`）仅在回放数据里给（对局已结束，无泄露风险）。
+- 老对局（`hand_actions` 无记录）：`actions` 返回空数组 `[]`，前端据此提示"该局无回放数据"（不报 404，hands 摘要仍在）。
+
+```ts
+ReplayData = {
+  hand_id: number;
+  game_type: "texas" | "guandan" | "brag";
+  board: string;          // 公共牌 code 串，如 "AsKdQh"；无则空串
+  pot: number;
+  ended_at: string;       // ISO 8601 UTC
+  players: ReplayPlayer[];
+  actions: ReplayAction[]; // 按 seq 升序；空数组表示该局无逐 action 记录
+}
+
+ReplayPlayer = {
+  name: string;
+  seat: number;
+  is_bot: boolean;
+  hole: string;           // 起手牌 code 串，如 "AsKd"；掼蛋等无则空串
+}
+
+ReplayAction = {
+  seq: number;            // 局内序号，从 0 起，唯一且递增
+  name: string;           // 行动者展示名（sid 重连会变，回放用 name）
+  action: string;         // fold|call|raise|check|all_in|play|pass|look|compare|...
+  payload: Record<string, unknown> | null;  // 如 { amount: 50 } / { cards: ["As","Kd"] }
+  stage: string;          // 动作发生时的 stage（preflop/flop/.../betting/play）
+  ts: string;             // ISO 8601 UTC
+}
+```
+
+> 字段命名与 §2.4 `ActionLog` 对齐（`action`/`name`），但 replay 多了 `seq`/`stage`/`payload` 用于精确重建。前端回放播放器按 `actions` 逐步推进，复用牌桌只读渲染。
+
+新增错误码：`HAND_NOT_FOUND`（加入 §2.6 枚举）。
+
 ---
 
 ## 2. Socket.IO
@@ -345,7 +392,7 @@ remove_bot: { table_id, seat }
 | S→C | `system:announce` `{ text }` | 维护通知（v1 可不发） |
 
 `error.code` 枚举：
-`AUTH_REQUIRED | NOT_ALLOWED | INVALID_TOKEN | TABLE_NOT_FOUND | SEAT_TAKEN | FORBIDDEN | INVALID_ACTION | OUT_OF_TURN | RULE_VIOLATION | INVALID_INPUT | USER_NOT_FOUND | NO_MATCH`
+`AUTH_REQUIRED | NOT_ALLOWED | INVALID_TOKEN | TABLE_NOT_FOUND | SEAT_TAKEN | FORBIDDEN | INVALID_ACTION | OUT_OF_TURN | RULE_VIOLATION | INVALID_INPUT | USER_NOT_FOUND | NO_MATCH | HAND_NOT_FOUND`
 
 ---
 

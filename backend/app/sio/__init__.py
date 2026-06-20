@@ -7,10 +7,10 @@ import socketio
 import asyncio
 import random
 
-from .auth import verify_token
-from .lobby import lobby
-from .logger import log
-from . import db
+from ..auth import verify_token
+from ..lobby import lobby
+from ..logger import log
+from .. import db
 
 # CORS 配置：生产从 ALLOWED_ORIGINS 读，开发默认 localhost
 ALLOWED_ORIGINS = os.getenv(

@@ -13,6 +13,7 @@ import {
 } from "react";
 import { clearToken, getToken, setToken } from "./api";
 import { connectSocket, disconnectSocket, IS_MOCK } from "./socket";
+import { clearMeCache } from "./hooks/useMe";
 
 interface AuthValue {
   name: string | null;
@@ -47,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(NAME_KEY);
     setName(null);
     disconnectSocket();
+    clearMeCache(); // 清除 useMe 缓存
   }, []);
 
   const value = useMemo<AuthValue>(

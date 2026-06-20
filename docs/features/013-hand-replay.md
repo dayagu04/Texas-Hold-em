@@ -4,7 +4,7 @@
 > **状态**: 待排期(前瞻,排到后面)
 > **优先级**: P2(前瞻性,较大改动)
 > **依赖**: SQLite 持久化层;摊牌数据(#010)
-> **契约**: [API-CONTRACT.md](../design/API-CONTRACT.md) 需新增回放接口(本需求落地前先在契约补 §)
+> **契约**: [API-CONTRACT.md](../design/API-CONTRACT.md) §1.8（回放接口已落地，可直接实现）
 > **预估**: 后端 4-6h(新表+写入埋点+接口),前端 4-6h(回放播放器)
 
 > ⚠️ **这是较大改动,排在产品力需求之后**。当前 DB 只存每局**摘要**(`hands` + `hand_players`,见 [backend/app/db.py](../../backend/app/db.py)),不存 action 序列,无法回放。本需求要新增逐 action 记录,涉及全引擎埋点,工作量和回归风险都不小。
@@ -46,18 +46,20 @@ CREATE INDEX IF NOT EXISTS idx_ha_hand ON hand_actions(hand_id);
 
 > 注意 sid 重连会变(见 stale-player 修复历史),回放展示用 `name` 更稳,`sid` 仅作原始留痕。
 
-### 2.3 回放接口(契约需新增)
+### 2.3 回放接口(契约 §1.8,已落地)
+
+接口结构以 [API-CONTRACT.md](../design/API-CONTRACT.md) §1.8 `ReplayData` 为准:
 
 ```
 GET /api/hand/{hand_id}/replay   Authorization: Bearer <token>
-200 → {
-  hand_id, game_type, board, pot, ended_at,
-  players: [{ name, seat, is_bot, hole }],   // 起手牌(摊牌信息)
-  actions: [{ seq, name, action, payload, stage, ts }]
-}
+200 → ReplayData { hand_id, game_type, board, pot, ended_at, players[], actions[] }
+403 → FORBIDDEN(非参与者)
+404 → HAND_NOT_FOUND(对局不存在)
 ```
 - 权限:仅参与该局的玩家可看(查 `hand_players` 是否含当前用户),否则 403。
 - 起手牌只在回放里给(局已结束,无泄露风险)。
+- 老对局(无 `hand_actions` 记录)→ `actions: []`,**不报 404**,前端提示"该局无回放数据"。
+- 回放 action 展示用 `name`(sid 重连会变),契约响应里不含 sid。
 
 ### 2.4 前端回放播放器
 

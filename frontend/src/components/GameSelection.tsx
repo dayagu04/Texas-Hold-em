@@ -6,14 +6,14 @@
  * 右上角：未登录显示[登录]按钮，已登录显示头像+用户名+退出。
  * 视觉：赌场暗金主题 + framer-motion 淡入淡出动效。
  */
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "../auth";
+import { useMe } from "../hooks/useMe";
 import { zhCN } from "../i18n/zh-CN";
 import LoginModal from "./LoginModal";
 import Avatar from "./Avatar";
-import * as api from "../api";
 import type { GameType } from "../types";
 import { MOTION } from "../theme/motion";
 
@@ -51,26 +51,12 @@ const GAMES: GameInfo[] = [
 
 export default function GameSelection() {
   const { name, isAuthed, signOut } = useAuth();
+  const { data: meData } = useMe();
   const navigate = useNavigate();
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [avatar, setAvatar] = useState<string | null>(null);
-  const [points, setPoints] = useState<number | null>(null);
 
-  // 加载头像 + 积分
-  useEffect(() => {
-    if (isAuthed) {
-      api
-        .me()
-        .then((res) => {
-          setAvatar(res.avatar ?? null);
-          setPoints(res.points ?? null);
-        })
-        .catch(() => {
-          setAvatar(null);
-          setPoints(null);
-        });
-    }
-  }, [isAuthed]);
+  const avatar = isAuthed ? meData?.avatar ?? null : null;
+  const points = isAuthed ? meData?.points ?? null : null;
 
   const handleStartGame = () => {
     if (isAuthed) {

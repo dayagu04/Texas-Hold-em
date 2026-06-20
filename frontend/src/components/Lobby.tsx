@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSocket } from "../hooks/useSocket";
+import { useMe } from "../hooks/useMe";
 import { useAuth } from "../auth";
 import { connectSocket } from "../socket";
 import { zhCN } from "../i18n/zh-CN";
@@ -28,6 +29,7 @@ const TAG_BG: Record<GameType, string> = {
 export default function Lobby() {
   const { subscribe, emit } = useSocket();
   const { name, signOut } = useAuth();
+  const { data: meData } = useMe();
   const navigate = useNavigate();
   const [tables, setTables] = useState<LobbyTable[]>([]);
   const [filterGame, setFilterGame] = useState<GameType | "all">("all");
@@ -35,28 +37,18 @@ export default function Lobby() {
     new Set(["waiting", "playing"]),
   );
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [avatar, setAvatar] = useState<string | null>(null);
-  const [points, setPoints] = useState<number | null>(null);
   const [quickMatchGameType, setQuickMatchGameType] = useState<GameType | null>(null);
+
+  const avatar = meData?.avatar ?? null;
+  const points = meData?.points ?? null;
 
   // 进入大厅时建立 socket 连接（幂等）
   useEffect(() => {
     connectSocket();
   }, []);
 
-  // 加载头像 + 积分
-  useEffect(() => {
-    api
-      .me()
-      .then((res) => {
-        setAvatar(res.avatar ?? null);
-        setPoints(res.points ?? null);
-      })
-      .catch(() => {
-        setAvatar(null);
-        setPoints(null);
-      });
-  }, []);
+  // 加载头像 + 积分（useMe 已提供，移除重复请求）
+  // useEffect 已移除，直接使用 meData
 
   useEffect(() => {
     const off = subscribe("lobby:update", (data) => setTables(data.tables));
