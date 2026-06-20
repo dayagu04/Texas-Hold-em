@@ -37,6 +37,7 @@ export default function Lobby() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [points, setPoints] = useState<number | null>(null);
+  const [quickMatchGameType, setQuickMatchGameType] = useState<GameType | null>(null);
 
   // 进入大厅时建立 socket 连接（幂等）
   useEffect(() => {
@@ -63,6 +64,17 @@ export default function Lobby() {
     return off;
   }, [subscribe, emit]);
 
+  // 处理 lobby:no_match（快速匹配无房间时引导创建）
+  useEffect(() => {
+    const off = subscribe("lobby:no_match", (data: { game_type: GameType }) => {
+      if (confirm(zhCN.lobby.noMatchFound)) {
+        setQuickMatchGameType(data.game_type);
+        setShowCreateModal(true);
+      }
+    });
+    return off;
+  }, [subscribe]);
+
   const handleLogout = () => {
     signOut();
     navigate("/login", { replace: true });
@@ -80,10 +92,15 @@ export default function Lobby() {
   const handleCreated = useCallback(
     (id: string) => {
       setShowCreateModal(false);
+      setQuickMatchGameType(null);
       navigate(`/table/${id}`);
     },
     [navigate],
   );
+
+  const handleQuickMatch = (gameType: GameType) => {
+    emit("lobby:quick_match", { game_type: gameType });
+  };
 
   const toggleStatus = (s: TableStatus) => {
     const next = new Set(filterStatus);
@@ -146,6 +163,24 @@ export default function Lobby() {
       </header>
 
       <div className="mx-auto max-w-7xl p-6">
+        {/* 快速开局按钮组 */}
+        <div className="mb-6 rounded-panel border border-gold/30 bg-elev p-4 shadow-card">
+          <h3 className="mb-3 text-sm font-medium text-text-hi">
+            {zhCN.lobby.quickMatch}
+          </h3>
+          <div className="flex gap-3">
+            {(["texas", "guandan", "brag"] as const).map((game) => (
+              <button
+                key={game}
+                onClick={() => handleQuickMatch(game)}
+                className="flex-1 rounded-card border border-gold/50 bg-gold/5 px-4 py-2 text-sm font-medium text-gold transition hover:bg-gold/10"
+              >
+                {zhCN.gameType[game]}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex gap-6">
           {/* 左侧筛选 */}
           <aside className="w-48 flex-shrink-0">
@@ -278,8 +313,12 @@ export default function Lobby() {
 
       {showCreateModal && (
         <CreateTableModal
-          onClose={() => setShowCreateModal(false)}
+          onClose={() => {
+            setShowCreateModal(false);
+            setQuickMatchGameType(null);
+          }}
           onCreated={handleCreated}
+          preselectedGame={quickMatchGameType ?? undefined}
         />
       )}
     </div>

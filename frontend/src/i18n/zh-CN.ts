@@ -52,6 +52,8 @@ export const zhCN = {
     statusPlaying: "进行中",
     seats: (taken: number, total: number) => `${taken}/${total}`,
     hasBots: "含 AI",
+    quickMatch: "快速开局",
+    noMatchFound: "没有可加入的房间，帮你创建一个？",
   },
 
   createTable: {
@@ -110,6 +112,11 @@ export const zhCN = {
     chatPlaceholder: "说点什么…",
     timeout: (s: number) => `${s}s`,
     quickMessages: ["加注?", "跟!", "弃了", "好牌!", "稳住", "梭哈?", "👍", "😏"],
+    roomNumber: (id: string) => `房间 #${id}`,
+    copyRoomNumber: "📋 复制房间号",
+    copyInviteLink: "🔗 复制邀请链接",
+    copiedRoomNumber: "已复制房间号",
+    copiedInviteLink: "邀请链接已复制",
   },
 
   actions: {

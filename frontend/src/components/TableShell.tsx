@@ -167,6 +167,19 @@ export default function TableShell({
     emit("table:chat", { table_id: tableId, text: msg });
   };
 
+  const handleCopyRoomNumber = () => {
+    navigator.clipboard.writeText(tableId).then(() => {
+      alert(zhCN.table.copiedRoomNumber);
+    });
+  };
+
+  const handleCopyInviteLink = () => {
+    const link = `${window.location.origin}/table/${tableId}`;
+    navigator.clipboard.writeText(link).then(() => {
+      alert(zhCN.table.copiedInviteLink);
+    });
+  };
+
   const handleAction = (action: string, payload: unknown = {}) => {
     emit("table:action", { table_id: tableId, action, payload });
   };
@@ -181,10 +194,28 @@ export default function TableShell({
         >
           ← {zhCN.table.leave}
         </button>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-text-lo">
+            {zhCN.table.roomNumber(tableId)}
+          </span>
+          <button
+            onClick={handleCopyRoomNumber}
+            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            title={zhCN.table.copyRoomNumber}
+          >
+            📋
+          </button>
+          <button
+            onClick={handleCopyInviteLink}
+            className="rounded border border-rim/50 px-2 py-1 text-xs text-text-lo transition hover:border-gold/50 hover:text-text-hi"
+            title={zhCN.table.copyInviteLink}
+          >
+            🔗
+          </button>
+        </div>
         <span className="text-sm text-text-lo">
           {zhCN.table.handNo(handId)}
         </span>
-        <div className="w-24"></div>
       </header>
 
       <div className="flex flex-1">

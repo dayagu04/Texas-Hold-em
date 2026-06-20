@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   CreateTablePayload,
   BotLevel,
+  GameType,
   HandEnd,
   LobbyTable,
   PrivateState,
@@ -17,6 +18,7 @@ import type {
 export interface ServerToClientEvents {
   "lobby:update": (data: { tables: LobbyTable[] }) => void;
   "lobby:joined": (data: { table_id: string; your_seat: number | null }) => void;
+  "lobby:no_match": (data: { game_type: GameType }) => void;
   "table:state": (data: TableState) => void;
   "table:private": (data: PrivateState) => void;
   "table:chat": (data: ChatMessage) => void;
@@ -36,6 +38,7 @@ export interface ClientToServerEvents {
     spectate?: boolean;
   }) => void;
   "lobby:leave_table": (payload: { table_id: string }) => void;
+  "lobby:quick_match": (payload: { game_type: GameType }) => void;
   "table:action": (payload: {
     table_id: string;
     action: string;
