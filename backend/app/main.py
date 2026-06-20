@@ -225,6 +225,17 @@ def admin_remove_whitelist(name: str, username: str = Depends(get_current_admin)
     return {"removed": name}
 
 
+@app.get("/api/leaderboard")
+def leaderboard(metric: str = "points", limit: int = 10, username: str = Depends(get_current_user)):
+    """返回积分榜 Top N。metric=points|net|winrate，limit clamp 1..50。"""
+    # 规范化 metric
+    metric = metric.lower()
+    if metric not in ("points", "net", "winrate"):
+        metric = "points"
+    entries = db.get_leaderboard(metric, limit)
+    return {"metric": metric, "entries": entries}
+
+
 @app.post("/api/lobby/cleanup")
 async def cleanup_lobby(authorization: str = Header(None)):
     """清理无真人在座的房间（死局回收）。需要 token 鉴权。

@@ -414,3 +414,57 @@ def get_history(name: str, limit: int = 20) -> list[dict]:
         return history
     finally:
         conn.close()
+
+
+# ---- 积分榜 ----
+
+def get_leaderboard(metric: str = "points", limit: int = 10) -> list[dict]:
+    """返回积分榜 Top N，按指定 metric 排序。
+
+    metric: "points" | "net" | "winrate"
+    limit: 1..50
+
+    winrate 需 hands_played >= 10 才入榜。
+    """
+    metric = metric.lower()
+    if metric not in ("points", "net", "winrate"):
+        metric = "points"
+    limit = max(1, min(limit, 50))
+
+    conn = _connect()
+    try:
+        if metric == "points":
+            order_by = "points DESC"
+            where = ""
+        elif metric == "net":
+            order_by = "total_net DESC"
+            where = ""
+        else:  # winrate
+            order_by = "(CAST(hands_won AS REAL) / hands_played) DESC"
+            where = "WHERE hands_played >= 10"
+
+        query = f"""
+            SELECT name, avatar, points, hands_played, hands_won, total_net
+            FROM users
+            {where}
+            ORDER BY {order_by}
+            LIMIT ?
+        """
+        rows = conn.execute(query, (limit,)).fetchall()
+
+        entries = []
+        for i, r in enumerate(rows, start=1):
+            winrate = round(r["hands_won"] / r["hands_played"], 2) if r["hands_played"] > 0 else 0.0
+            entries.append({
+                "rank": i,
+                "name": r["name"],
+                "avatar": r["avatar"],
+                "points": r["points"],
+                "hands_played": r["hands_played"],
+                "hands_won": r["hands_won"],
+                "total_net": r["total_net"],
+                "winrate": winrate,
+            })
+        return entries
+    finally:
+        conn.close()
