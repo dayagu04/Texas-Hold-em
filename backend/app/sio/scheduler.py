@@ -162,7 +162,10 @@ def _record_hand_to_db(engine):
                 "result": result,
             })
 
-        db.record_hand(table_id, game_type, pot, board, players_data)
+        # 逐 action 序列（#013 回放）：引擎内存里累积的 full_action_log
+        actions = getattr(engine, "full_action_log", None)
+
+        db.record_hand(table_id, game_type, pot, board, players_data, actions=actions)
         state.chips_snapshots.pop(table_id, None)  # 清理快照
     except Exception as e:
         log(f"[db] record_hand failed for table={engine.id}: {e}")
