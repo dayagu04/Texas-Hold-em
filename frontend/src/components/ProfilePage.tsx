@@ -62,6 +62,7 @@ export default function ProfilePage() {
   const [history, setHistory] = useState<HandHistory[] | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [myRank, setMyRank] = useState<number | null>(null);
 
   useEffect(() => {
     // 头像 + 积分（me 也带 points，但 stats 更全）
@@ -82,7 +83,16 @@ export default function ProfilePage() {
       .getHistory(20)
       .then((res) => setHistory(res.history))
       .catch(() => setHistory([]));
-  }, []);
+
+    // 获取我的排名（从 Top 50 中找）
+    api
+      .getLeaderboard("points", 50)
+      .then((res) => {
+        const myEntry = res.entries.find((e) => e.name === name);
+        setMyRank(myEntry?.rank ?? null);
+      })
+      .catch(() => setMyRank(null));
+  }, [name]);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -208,6 +218,17 @@ export default function ProfilePage() {
               >
                 {stats ? stats.points.toLocaleString("en-US") : "—"}
               </div>
+              {/* 我的排名 */}
+              {myRank !== null && (
+                <div className="mt-2 text-sm text-text-lo">
+                  {zhCN.leaderboard.myRank(myRank)}
+                </div>
+              )}
+              {myRank === null && stats && stats.points > 0 && (
+                <div className="mt-2 text-sm text-text-lo">
+                  {zhCN.leaderboard.notRanked}
+                </div>
+              )}
             </div>
             <div className="flex gap-6 text-sm">
               <Metric label="总局数" value={stats ? stats.hands_played : "—"} />

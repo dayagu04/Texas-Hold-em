@@ -16,6 +16,7 @@ import * as api from "../api";
 import CreateTableModal from "./CreateTableModal";
 import ReconnectBanner from "./ReconnectBanner";
 import Avatar from "./Avatar";
+import Leaderboard from "./Leaderboard";
 import type { GameType, LobbyTable, TableStatus } from "../types";
 
 const TAG_BG: Record<GameType, string> = {
@@ -203,7 +204,7 @@ export default function Lobby() {
             </div>
           </aside>
 
-          {/* 右侧房间网格 */}
+          {/* 中间房间网格 */}
           <main className="flex-1">
             {filtered.length === 0 ? (
               <p className="py-16 text-center text-text-lo">
@@ -265,6 +266,13 @@ export default function Lobby() {
               </div>
             )}
           </main>
+
+          {/* 右侧积分榜 */}
+          <aside className="w-64 flex-shrink-0">
+            <div className="sticky top-6">
+              <Leaderboard />
+            </div>
+          </aside>
         </div>
       </div>
 

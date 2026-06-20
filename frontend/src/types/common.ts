@@ -188,3 +188,17 @@ export interface WhitelistUser {
   created_at: string | null;
   points: number;
 }
+
+/* ---- 积分榜（GET /api/leaderboard）---- */
+export type LeaderboardMetric = "points" | "net" | "winrate";
+
+export interface LeaderboardEntry {
+  rank: number;
+  name: string;
+  avatar: string | null;
+  points: number;
+  hands_played: number;
+  hands_won: number;
+  total_net: number;
+  winrate: number; // 0..1
+}

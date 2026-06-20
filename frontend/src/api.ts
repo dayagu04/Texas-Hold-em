@@ -4,6 +4,8 @@
  */
 import type {
   HandHistory,
+  LeaderboardEntry,
+  LeaderboardMetric,
   LobbyTable,
   LoginResponse,
   MeResponse,
@@ -148,4 +150,16 @@ export function removeFromWhitelist(name: string): Promise<{ removed: string }> 
     method: "DELETE",
     auth: true,
   });
+}
+
+/** GET /api/leaderboard - 获取积分榜 */
+export function getLeaderboard(
+  metric: LeaderboardMetric = "points",
+  limit = 10,
+): Promise<{ metric: LeaderboardMetric; entries: LeaderboardEntry[] }> {
+  const safeLimit = Math.min(Math.max(1, limit), 50);
+  return request<{ metric: LeaderboardMetric; entries: LeaderboardEntry[] }>(
+    `/api/leaderboard?metric=${metric}&limit=${safeLimit}`,
+    { method: "GET", auth: true },
+  );
 }

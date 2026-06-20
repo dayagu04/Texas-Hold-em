@@ -179,6 +179,16 @@ export const zhCN = {
     self: "（你）",
   },
 
+  leaderboard: {
+    title: "排行榜",
+    metricPoints: "积分",
+    metricNet: "净胜",
+    metricWinrate: "胜率",
+    myRank: (rank: number) => `我的排名：第 ${rank} 名`,
+    notRanked: "未上榜",
+    rank: (n: number) => `第 ${n} 名`,
+  },
+
   errors: {
     AUTH_REQUIRED: "需要登录",
     NOT_ALLOWED: "用户不在白名单",
