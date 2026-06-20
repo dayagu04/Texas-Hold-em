@@ -7,12 +7,13 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { zhCN } from "../i18n/zh-CN";
-import { emit, subscribe } from "../socket";
+import { emit } from "../socket";
 import { debugLog } from "../utils/debug";
 import { soundManager } from "../utils/sound";
+import { useTableState } from "../hooks/useTableState";
 import Countdown from "./Countdown";
 import HandEndModal from "./HandEndModal";
-import type { ActionLog, ChatMessage, CurrentTurn, GameType, HandEnd, LegalAction, PrivateState, PublicPlayer } from "../types";
+import type { ActionLog, CurrentTurn, GameType, LegalAction, PrivateState, PublicPlayer } from "../types";
 
 /* 各玩法最小开局人数（对齐后端 min_players 校验）。 */
 const MIN_PLAYERS: Record<GameType, number> = {
@@ -59,16 +60,22 @@ export default function TableShell({
   const navigate = useNavigate();
   const [chatText, setChatText] = useState("");
   const [raiseAmount, setRaiseAmount] = useState(0);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [liveAnnounce, setLiveAnnounce] = useState("");
-  const [showHandEnd, setShowHandEnd] = useState(false);
-  const [handEndData, setHandEndData] = useState<HandEnd | null>(null);
   // 聊天改为右下浮动窗:默认收起,点击展开。展开时记录已读数算未读红点。
   const [chatOpen, setChatOpen] = useState(false);
   const [readCount, setReadCount] = useState(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
-  const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - readCount);
   const prevStageRef = useRef<string>(stage);
+
+  // 使用 useTableState hook 管理 socket 订阅
+  const {
+    chatMessages,
+    handEndData,
+    showHandEnd,
+    setShowHandEnd,
+  } = useTableState({ mySid, onHandEnd: undefined });
+
+  const unread = chatOpen ? 0 : Math.max(0, chatMessages.length - readCount);
 
   const isMyTurn = currentTurn?.sid === mySid;
   const legalActions = privateState?.legal_actions ?? [];
@@ -150,29 +157,6 @@ export default function TableShell({
   const handleToggleReady = () => {
     emit("table:set_ready", { table_id: tableId, ready: !iAmReady });
   };
-
-  // 订阅聊天消息
-  useEffect(() => {
-    const off = subscribe("table:chat", (msg) => {
-      setChatMessages((prev) => [...prev, msg]);
-      soundManager.play("chat"); // 聊天音效
-    });
-    return off;
-  }, []);
-
-  // 订阅摊牌结算：收到 table:hand_end 弹出结算浮层。
-  useEffect(() => {
-    const off = subscribe("table:hand_end", (data) => {
-      setHandEndData(data);
-      setShowHandEnd(true);
-      // 检查是否获胜（仅对 Texas/Brag 玩家结算）
-      const myResult = data.results.find((r: any) => r.sid === mySid);
-      if (myResult && "amount" in myResult && myResult.amount > 0) {
-        soundManager.play("win");
-      }
-    });
-    return off;
-  }, [mySid]);
 
   // 展开时滚动聊天到底部（已读标记在打开按钮的 onClick 里处理，避免在 effect 里 setState）
   useEffect(() => {
